@@ -1,0 +1,317 @@
+<title>DMX-Dongle Schaltplan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: schmale Doku-Spalte, Schaltplan-Blätter als scrollbare Tafeln, Stückliste darunter */
+  :root {
+    --bg: #f5f7f8;
+    --paper: #ffffff;
+    --fg: #17212b;
+    --muted: #5b6874;
+    --rule: #d9e0e5;
+    --wire: #1f6f8b;
+    --part: #17212b;
+    --net: #c2570c;
+    --net-bg: #fff3e8;
+    --warn-bg: #fff8e1;
+    --warn-fg: #6d4c00;
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1418; --paper: #161d23; --fg: #e4eaee; --muted: #93a1ad; --rule: #2a343c;
+      --wire: #5cb8d6; --part: #e4eaee; --net: #ff9a4d; --net-bg: #3a2414;
+      --warn-bg: #2e2610; --warn-fg: #f2d27a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1418; --paper: #161d23; --fg: #e4eaee; --muted: #93a1ad; --rule: #2a343c;
+    --wire: #5cb8d6; --part: #e4eaee; --net: #ff9a4d; --net-bg: #3a2414;
+    --warn-bg: #2e2610; --warn-fg: #f2d27a; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  }
+  .wrap {
+    max-width: 880px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+    display: grid; gap: 28px;
+  }
+  header { display: grid; gap: 8px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--net); }
+  h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 6vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: 20px; margin: 0; text-wrap: balance; }
+  p { margin: 0; max-width: 65ch; }
+  .lead { color: var(--muted); }
+  section { display: grid; gap: 12px; min-width: 0; }
+  .sheet {
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 6px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .sheet svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  .sheet-head {
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    padding: 10px 14px; border-bottom: 1px solid var(--rule); min-width: 640px;
+  }
+  .hint { font-size: 13px; color: var(--muted); }
+  svg text { font-family: var(--mono); fill: var(--fg); }
+  svg .ref { font-weight: 600; font-size: 13px; }
+  svg .val { font-size: 12px; fill: var(--muted); }
+  svg .pin { font-size: 11px; }
+  svg .pnum { font-size: 9px; fill: var(--muted); }
+  svg .netl { font-size: 11px; font-weight: 600; fill: var(--net); }
+  svg .note { font-family: var(--body); font-size: 12px; fill: var(--muted); }
+  .warn {
+    background: var(--warn-bg); color: var(--warn-fg); border-radius: 6px;
+    padding: 12px 14px; display: grid; gap: 6px; font-size: 14px;
+  }
+  .warn strong { font-weight: 600; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  td.ref, td.qty { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 70ch; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--net-bg); color: var(--net); padding: 1px 5px; border-radius: 3px; }
+  .pinmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .pinmap div { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; font-size: 14px; }
+  .pinmap b { font-family: var(--mono); color: var(--net); font-weight: 600; display: block; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Hardware · Rev A · ESP32-Prototyp</div>
+    <h1>DMX-Dongle Schaltplan</h1>
+    <p class="lead">Versorgung über USB aus der Powerbank, ESP32-DevKitC als Herz, zwei 3,3-V-RS485-Treiber für zwei DMX-Universen. Passt 1:1 zur Firmware (<code>board_config.h</code>).</p>
+  </header>
+
+  <section>
+    <h2>Blatt 1 · Versorgung und Mikrocontroller</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 1/2</span><span>Netze mit gleichem Namen sind verbunden</span></div>
+      <svg id="s1" viewBox="0 0 760 360" role="img" aria-label="Schaltplan Versorgung und ESP32"></svg>
+    </div>
+    <p class="hint">Breite Ansicht: seitlich wischen.</p>
+  </section>
+
+  <section>
+    <h2>Blatt 2 · DMX-Ausgänge A und B</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 2/2 · Port A</span><span>U2 · J1</span></div>
+      <svg id="sA" viewBox="0 0 760 290" role="img" aria-label="Schaltplan DMX-Ausgang A"></svg>
+    </div>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 2/2 · Port B</span><span>U3 · J2</span></div>
+      <svg id="sB" viewBox="0 0 760 290" role="img" aria-label="Schaltplan DMX-Ausgang B"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pinbelegung auf einen Blick</h2>
+    <div class="pinmap">
+      <div><b>GPIO 17</b>DMX A Daten → U2 DI</div>
+      <div><b>GPIO 4</b>DMX A Senden → U2 DE + /RE</div>
+      <div><b>GPIO 25</b>DMX B Daten → U3 DI</div>
+      <div><b>GPIO 26</b>DMX B Senden → U3 DE + /RE</div>
+      <div><b>GPIO 2</b>Status-LED (über 330 Ω)</div>
+      <div><b>GPIO 0</b>BOOT-Taste: 3 s = WLAN zurücksetzen</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Stückliste</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ref</th><th>Anz.</th><th>Bauteil</th><th>Hinweis</th></tr></thead>
+        <tbody>
+          <tr><td class="ref">U1</td><td class="qty">1</td><td>ESP32-DevKitC mit ESP32-WROOM-32E</td><td>Kein WROVER: dort ist GPIO 17 vom PSRAM belegt. USB-C-Variante bevorzugen.</td></tr>
+          <tr><td class="ref">U2, U3</td><td class="qty">2</td><td>SP3485 oder MAX3485, SOIC-8 / DIP-8</td><td>3,3-V-RS485-Treiber. Fertigmodul „MAX3485 / TTL zu RS485“ geht auch.</td></tr>
+          <tr><td class="ref">D1, D2</td><td class="qty">2</td><td>SM712 (SOT-23)</td><td>TVS-Schutz für RS485-Leitungen gegen Spannungsspitzen am XLR.</td></tr>
+          <tr><td class="ref">J1, J2</td><td class="qty">2</td><td>XLR-Buchse 3-polig, Einbau (Female)</td><td>Pin 1 GND, Pin 2 Data−, Pin 3 Data+. Für Profi-Geräte alternativ 5-polig.</td></tr>
+          <tr><td class="ref">C1</td><td class="qty">1</td><td>100 µF, 10 V, Elko</td><td>Puffer auf 3V3 gegen Einbrüche bei WLAN-Sendespitzen.</td></tr>
+          <tr><td class="ref">C2, C3</td><td class="qty">2</td><td>100 nF, Keramik</td><td>Direkt an Pin 8 von U2 / U3.</td></tr>
+          <tr><td class="ref">R1</td><td class="qty">1</td><td>330 Ω</td><td>Vorwiderstand Status-LED.</td></tr>
+          <tr><td class="ref">D3</td><td class="qty">1</td><td>LED 3 mm, grün</td><td>Blinkt bei empfangenen DMX-Daten.</td></tr>
+          <tr><td class="ref">–</td><td class="qty">1</td><td>USB-Kabel + Powerbank</td><td>Siehe Hinweis zur Abschaltung unten.</td></tr>
+          <tr><td class="ref">–</td><td class="qty">1</td><td>120 Ω Abschlussstecker (XLR male)</td><td>Gehört ans Ende der DMX-Kette, nicht in den Dongle.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Worauf es ankommt</h2>
+    <div class="warn">
+      <strong>Powerbank schaltet ab?</strong>
+      <span>Viele Powerbanks gehen bei sehr kleinem Strom aus. Der Dongle zieht mit dauerhaft aktivem WLAN etwa 100–150 mA, das reicht meist. Falls sie trotzdem abschaltet: Powerbank mit „Always on“ bzw. Kleinstrom-Modus nehmen.</span>
+    </div>
+    <ul>
+      <li>Alle RS485-Treiber laufen an <code>3V3</code> vom DevKit-Regler. Der kann 600–800 mA, genug für ESP32 und zwei Treiber.</li>
+      <li>DE und /RE jedes Treibers sind gebrückt: High = Senden. Die Firmware setzt die Pins beim Start auf High. RO bleibt offen.</li>
+      <li>Der Dongle ist Sender am Anfang der Kette. Der 120-Ω-Abschluss gehört ans letzte Gerät, nicht auf die Platine.</li>
+      <li>GPIO 2 ist ein Boot-Pin. Die LED gegen GND hält ihn beim Start Low, das ist korrekt und stört das Flashen nicht.</li>
+      <li>Für die spätere eigene Platine: isolierte Treiber (z. B. ADM2587E) schützen vor Masseschleifen bei großen Anlagen.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  const W = 'var(--wire)', P = 'var(--part)', N = 'var(--net)', NB = 'var(--net-bg)', PAPER = 'var(--paper)';
+
+  const wire = (pts) => `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${W}" stroke-width="2" stroke-linejoin="round"/>`;
+  const dot = (x, y) => `<circle cx="${x}" cy="${y}" r="3.5" fill="${W}"/>`;
+  const t = (x, y, s, cls, anchor) => `<text x="${x}" y="${y}" class="${cls}"${anchor ? ` text-anchor="${anchor}"` : ''}>${s}</text>`;
+
+  function gnd(x, y) {
+    return `<line x1="${x}" y1="${y}" x2="${x}" y2="${y + 10}" stroke="${W}" stroke-width="2"/>
+      <line x1="${x - 10}" y1="${y + 10}" x2="${x + 10}" y2="${y + 10}" stroke="${P}" stroke-width="2"/>
+      <line x1="${x - 6}" y1="${y + 14}" x2="${x + 6}" y2="${y + 14}" stroke="${P}" stroke-width="2"/>
+      <line x1="${x - 2}" y1="${y + 18}" x2="${x + 2}" y2="${y + 18}" stroke="${P}" stroke-width="2"/>`;
+  }
+
+  // Netzfahne; dir = 'r' (Fahne zeigt nach rechts, Anschluss links) oder 'l'
+  function net(x, y, name, dir) {
+    const w = name.length * 7 + 16, h = 18;
+    const pts = dir === 'l'
+      ? [[x, y], [x - 8, y - h / 2], [x - w, y - h / 2], [x - w, y + h / 2], [x - 8, y + h / 2]]
+      : [[x, y], [x + 8, y - h / 2], [x + w, y - h / 2], [x + w, y + h / 2], [x + 8, y + h / 2]];
+    const tx = dir === 'l' ? x - w / 2 - 4 : x + w / 2 + 4;
+    return `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${NB}" stroke="${N}" stroke-width="1.5"/>${t(tx, y + 4, name, 'netl', 'middle')}`;
+  }
+
+  function capV(x, y1, y2, ref, val, polar) {
+    const m = (y1 + y2) / 2;
+    return `${wire([[x, y1], [x, m - 4]])}${wire([[x, m + 4], [x, y2]])}
+      <line x1="${x - 12}" y1="${m - 4}" x2="${x + 12}" y2="${m - 4}" stroke="${P}" stroke-width="2.5"/>
+      <line x1="${x - 12}" y1="${m + 4}" x2="${x + 12}" y2="${m + 4}" stroke="${P}" stroke-width="2.5"/>
+      ${polar ? t(x - 18, m - 6, '+', 'pnum', 'middle') : ''}
+      ${t(x + 18, m - 2, ref, 'ref')}${t(x + 18, m + 13, val, 'val')}`;
+  }
+
+  function capH(x1, x2, y, ref, val) {
+    const m = (x1 + x2) / 2;
+    return `${wire([[x1, y], [m - 4, y]])}${wire([[m + 4, y], [x2, y]])}
+      <line x1="${m - 4}" y1="${y - 12}" x2="${m - 4}" y2="${y + 12}" stroke="${P}" stroke-width="2.5"/>
+      <line x1="${m + 4}" y1="${y - 12}" x2="${m + 4}" y2="${y + 12}" stroke="${P}" stroke-width="2.5"/>
+      ${t(m, y - 18, ref, 'ref', 'middle')}${t(m, y + 28, val, 'val', 'middle')}`;
+  }
+
+  function resH(x1, x2, y, ref, val) {
+    const m = (x1 + x2) / 2;
+    return `${wire([[x1, y], [m - 20, y]])}${wire([[m + 20, y], [x2, y]])}
+      <rect x="${m - 20}" y="${y - 7}" width="40" height="14" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${t(m, y - 13, ref, 'ref', 'middle')}${t(m, y + 24, val, 'val', 'middle')}`;
+  }
+
+  function ledH(x1, x2, y, ref, val) {
+    const m = (x1 + x2) / 2;
+    return `${wire([[x1, y], [m - 9, y]])}${wire([[m + 9, y], [x2, y]])}
+      <polygon points="${m - 9},${y - 9} ${m - 9},${y + 9} ${m + 9},${y}" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      <line x1="${m + 9}" y1="${y - 9}" x2="${m + 9}" y2="${y + 9}" stroke="${P}" stroke-width="2"/>
+      <path d="M${m + 2},${y - 12} l7,-9 M${m + 9},${y - 21} l-5,1 M${m + 9},${y - 21} l-1,5" stroke="${P}" stroke-width="1.5" fill="none"/>
+      <path d="M${m + 9},${y - 10} l7,-9 M${m + 16},${y - 19} l-5,1 M${m + 16},${y - 19} l-1,5" stroke="${P}" stroke-width="1.5" fill="none"/>
+      ${t(m, y + 26, ref, 'ref', 'middle')}${t(m, y + 40, val, 'val', 'middle')}`;
+  }
+
+  // Bauteil-Box mit Pins: pins = [{side:'l'|'r', y, num, name}]
+  function chip(x, y, w, h, ref, val, pins) {
+    let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${t(x + w / 2, y - 22, ref, 'ref', 'middle')}${t(x + w / 2, y - 8, val, 'val', 'middle')}`;
+    for (const p of pins) {
+      const xe = p.side === 'l' ? x - 20 : x + w + 20;
+      const xi = p.side === 'l' ? x : x + w;
+      s += `<line x1="${xe}" y1="${p.y}" x2="${xi}" y2="${p.y}" stroke="${P}" stroke-width="2"/>`;
+      s += p.side === 'l'
+        ? t(x + 7, p.y + 4, p.name, 'pin') + (p.num ? t(x - 10, p.y - 4, p.num, 'pnum', 'middle') : '')
+        : t(x + w - 7, p.y + 4, p.name, 'pin', 'end') + (p.num ? t(x + w + 10, p.y - 4, p.num, 'pnum', 'middle') : '');
+    }
+    return s;
+  }
+
+  // ---------- Blatt 1 ----------
+  let s1 = '';
+  s1 += `<rect x="24" y="120" width="120" height="70" rx="10" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+    ${t(84, 150, 'Powerbank', 'ref', 'middle')}${t(84, 168, '5 V USB', 'val', 'middle')}`;
+  s1 += wire([[144, 155], [230, 155]]) + t(187, 146, 'USB-Kabel', 'note', 'middle');
+
+  s1 += chip(250, 50, 200, 280, 'U1', 'ESP32-DevKitC (WROOM-32E)', [
+    { side: 'l', y: 155, name: 'USB', num: '' },
+    { side: 'r', y: 80, name: '3V3', num: '' },
+    { side: 'r', y: 110, name: 'GND', num: '' },
+    { side: 'r', y: 150, name: 'GPIO17', num: '' },
+    { side: 'r', y: 175, name: 'GPIO4', num: '' },
+    { side: 'r', y: 210, name: 'GPIO25', num: '' },
+    { side: 'r', y: 235, name: 'GPIO26', num: '' },
+    { side: 'r', y: 280, name: 'GPIO2', num: '' },
+  ]);
+  s1 += t(350, 316, 'onboard: Regler 3,3 V · BOOT (GPIO0) · EN', 'note', 'middle');
+
+  // 3V3 + C1
+  s1 += wire([[470, 80], [690, 80]]) + dot(640, 80) + net(690, 80, '3V3', 'r');
+  s1 += capV(640, 80, 130, 'C1', '100 µF', true) + gnd(640, 130);
+  // GND
+  s1 += wire([[470, 110], [495, 110]]) + gnd(495, 110);
+  // Signale
+  s1 += wire([[470, 150], [520, 150]]) + net(520, 150, 'DMX_A_TX', 'r');
+  s1 += wire([[470, 175], [520, 175]]) + net(520, 175, 'DMX_A_DE', 'r');
+  s1 += wire([[470, 210], [520, 210]]) + net(520, 210, 'DMX_B_TX', 'r');
+  s1 += wire([[470, 235], [520, 235]]) + net(520, 235, 'DMX_B_DE', 'r');
+  // LED
+  s1 += resH(470, 560, 280, 'R1', '330 Ω') + ledH(560, 650, 280, 'D3', 'LED grün');
+  s1 += wire([[650, 280], [690, 280], [690, 300]]) + gnd(690, 300);
+  document.getElementById('s1').innerHTML = s1;
+
+  // ---------- Blatt 2 (Port A / B) ----------
+  function port(u, d, c, j, tx, de) {
+    let s = '';
+    s += chip(220, 60, 150, 150, u, 'SP3485 / MAX3485', [
+      { side: 'l', y: 90, num: '4', name: 'DI' },
+      { side: 'l', y: 120, num: '3', name: 'DE' },
+      { side: 'l', y: 150, num: '2', name: '/RE' },
+      { side: 'l', y: 185, num: '1', name: 'RO' },
+      { side: 'r', y: 80, num: '8', name: 'VCC' },
+      { side: 'r', y: 120, num: '6', name: 'A' },
+      { side: 'r', y: 155, num: '7', name: 'B' },
+      { side: 'r', y: 190, num: '5', name: 'GND' },
+    ]);
+    // links
+    s += net(130, 90, tx, 'l') + wire([[130, 90], [200, 90]]);
+    s += net(130, 120, de, 'l') + wire([[130, 120], [200, 120]]);
+    s += wire([[170, 120], [170, 150], [200, 150]]) + dot(170, 120);
+    s += `<path d="M194,179 l12,12 M206,179 l-12,12" stroke="${P}" stroke-width="2"/>` + t(180, 189, 'offen', 'note', 'end');
+    // VCC / GND
+    s += wire([[390, 80], [440, 80]]) + net(440, 80, '3V3', 'r');
+    s += wire([[390, 190], [410, 190], [410, 205]]) + gnd(410, 205);
+    // A / B zur XLR
+    s += wire([[390, 120], [620, 120]]) + wire([[390, 155], [620, 155]]);
+    s += t(560, 113, 'Data+', 'note', 'middle') + t(560, 148, 'Data−', 'note', 'middle');
+    // TVS
+    s += dot(480, 120) + dot(510, 155);
+    s += wire([[480, 120], [480, 180]]) + wire([[510, 155], [510, 180]]);
+    s += `<rect x="468" y="180" width="54" height="30" rx="3" fill="${PAPER}" stroke="${P}" stroke-width="2"/>`;
+    s += t(495, 200, 'TVS', 'pnum', 'middle') + t(530, 200, d, 'ref') + t(530, 214, 'SM712', 'val');
+    s += wire([[495, 210], [495, 225]]) + gnd(495, 225);
+    // XLR
+    s += `<rect x="620" y="95" width="90" height="125" rx="45" fill="${PAPER}" stroke="${P}" stroke-width="2"/>`;
+    s += t(665, 82, j, 'ref', 'middle') + t(665, 240, 'XLR 3-pol', 'val', 'middle');
+    s += `<circle cx="640" cy="120" r="5" fill="${P}"/><circle cx="640" cy="155" r="5" fill="${P}"/><circle cx="640" cy="190" r="5" fill="${P}"/>`;
+    s += t(654, 124, '3', 'pin') + t(654, 159, '2', 'pin') + t(654, 194, '1', 'pin');
+    s += t(672, 124, 'D+', 'pnum') + t(672, 159, 'D−', 'pnum') + t(672, 194, 'GND', 'pnum');
+    s += wire([[640, 190], [600, 190], [600, 205]]) + gnd(600, 205);
+    // C Entkopplung
+    s += net(96, 255, '3V3', 'l');
+    s += capH(110, 170, 255, c, '100 nF an Pin 8') + wire([[96, 255], [110, 255]]);
+    s += wire([[170, 255], [240, 255], [240, 262]]) + gnd(240, 262);
+    return s;
+  }
+  document.getElementById('sA').innerHTML = port('U2', 'D1', 'C2', 'J1', 'DMX_A_TX', 'DMX_A_DE');
+  document.getElementById('sB').innerHTML = port('U3', 'D2', 'C3', 'J2', 'DMX_B_TX', 'DMX_B_DE');
+})();
+</script>

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import 'app_scope.dart';
+import 'fixtures_screen.dart';
 
 /// Steuert ein oder mehrere Geräte gleichzeitig. Werte werden vom ersten
 /// Gerät angezeigt und auf alle gewählten übertragen.
@@ -21,21 +22,37 @@ class FixtureControlScreen extends StatelessWidget {
 
       return Scaffold(
         appBar: AppBar(
-          title: Text(fixtures.length == 1 ? first.name : '${fixtures.length} Geräte'),
+          title: Text(fixtures.length == 1 ? first.name : '${fixtures.length} Lampen'),
           actions: [
             IconButton(
-              tooltip: 'Geräte auf 0',
-              icon: const Icon(Icons.power_settings_new),
-              onPressed: () => app.engine.setMany([
-                for (final f in fixtures)
-                  for (var c = 0; c < (app.profileOf(f)?.footprint ?? 0); c++)
-                    (f.universe, f.address - 1 + c, 0),
-              ]),
+              tooltip: 'Einschalten',
+              icon: const Icon(Icons.light_mode_outlined),
+              onPressed: () => app.allOn(fixtures),
             ),
+            IconButton(
+              tooltip: 'Ausschalten',
+              icon: const Icon(Icons.power_settings_new),
+              onPressed: () => app.allOff(fixtures),
+            ),
+            if (fixtures.length == 1)
+              PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'edit') {
+                    showDialog(context: context, builder: (_) => EditFixtureDialog(app: app, fixture: first));
+                  } else if (v == 'delete') {
+                    app.removeFixture(first);
+                    Navigator.pop(context);
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Name & Adresse ändern')),
+                  PopupMenuItem(value: 'delete', child: Text('Lampe entfernen')),
+                ],
+              ),
           ],
         ),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
             if (any((p) => p.has(ChannelType.dimmer)))
               _Section(
@@ -69,6 +86,7 @@ class FixtureControlScreen extends StatelessWidget {
             if (sameProfile && ref != null)
               _Section(
                 title: 'Alle Kanäle',
+                collapsible: true,
                 child: Column(children: [
                   for (var i = 0; i < ref.channels.length; i++)
                     Row(children: [
@@ -94,19 +112,37 @@ class FixtureControlScreen extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
+  const _Section({required this.title, required this.child, this.collapsible = false});
   final String title;
   final Widget child;
+  final bool collapsible;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          child,
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: collapsible
+            ? ExpansionTile(
+                title: Text(title, style: style),
+                shape: const Border(),
+                collapsedShape: const Border(),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                children: [child],
+              )
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: style),
+                  const SizedBox(height: 6),
+                  child,
+                ]),
+              ),
+      ),
+    );
+  }
 }
 
 class _ValueSlider extends StatelessWidget {

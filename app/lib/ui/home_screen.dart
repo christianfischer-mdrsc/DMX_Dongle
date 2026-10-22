@@ -1,3 +1,5 @@
+import 'dart:ui' show FontFeature;
+
 import 'package:flutter/material.dart';
 
 import 'app_scope.dart';
@@ -5,6 +7,7 @@ import 'faders_screen.dart';
 import 'fixtures_screen.dart';
 import 'network_screen.dart';
 import 'scenes_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,28 +20,40 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
   static const _pages = [
-    FadersScreen(),
     FixturesScreen(),
     ScenesScreen(),
-    NetworkScreen(),
+    FadersScreen(),
+    SettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(child: IndexedStack(index: _tab, children: _pages)),
+      body: IndexedStack(index: _tab, children: _pages),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _MasterBar(),
+          if (_tab != 3) const MasterBar(),
           NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: const [
-              NavigationDestination(icon: Icon(Icons.tune), label: 'Fader'),
-              NavigationDestination(icon: Icon(Icons.lightbulb_outline), label: 'Geräte'),
-              NavigationDestination(icon: Icon(Icons.auto_awesome_motion), label: 'Szenen'),
-              NavigationDestination(icon: Icon(Icons.wifi_tethering), label: 'Netzwerk'),
+              NavigationDestination(
+                  icon: Icon(Icons.lightbulb_outline),
+                  selectedIcon: Icon(Icons.lightbulb),
+                  label: 'Steuern'),
+              NavigationDestination(
+                  icon: Icon(Icons.auto_awesome_outlined),
+                  selectedIcon: Icon(Icons.auto_awesome),
+                  label: 'Szenen'),
+              NavigationDestination(
+                  icon: Icon(Icons.tune_outlined),
+                  selectedIcon: Icon(Icons.tune),
+                  label: 'Fader'),
+              NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings),
+                  label: 'Einstellungen'),
             ],
           ),
         ],
@@ -47,47 +62,72 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Grandmaster + Blackout, immer sichtbar.
-class _MasterBar extends StatelessWidget {
-  const _MasterBar();
+/// Gesamthelligkeit + Blackout, über den Steuer-Tabs immer erreichbar.
+class MasterBar extends StatelessWidget {
+  const MasterBar({super.key});
 
   @override
   Widget build(BuildContext context) {
     return AppListener(builder: (context, app) {
       final e = app.engine;
-      final scheme = Theme.of(context).colorScheme;
-      return Material(
-        color: scheme.surfaceContainer,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
-          child: Row(
-            children: [
-              const Text('GM', style: TextStyle(fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Slider(
-                  value: e.grandMaster,
-                  onChanged: (v) => e.grandMaster = v,
-                ),
-              ),
-              SizedBox(
-                width: 40,
-                child: Text('${(e.grandMaster * 100).round()}%',
-                    textAlign: TextAlign.right),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: e.blackout ? Colors.red : scheme.surfaceContainerHighest,
-                  foregroundColor: e.blackout ? Colors.white : scheme.onSurface,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-                onPressed: () => e.blackout = !e.blackout,
-                child: const Text('BO'),
-              ),
-            ],
+      final s = Theme.of(context).colorScheme;
+      return Container(
+        color: s.surfaceContainerLowest,
+        padding: const EdgeInsets.fromLTRB(16, 6, 12, 2),
+        child: Row(children: [
+          Icon(Icons.brightness_6_outlined, size: 20, color: s.onSurfaceVariant),
+          Expanded(
+            child: Slider(
+              value: e.grandMaster,
+              onChanged: (v) => e.grandMaster = v,
+            ),
           ),
-        ),
+          SizedBox(
+            width: 44,
+            child: Text('${(e.grandMaster * 100).round()} %',
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+          ),
+          const SizedBox(width: 10),
+          FilterChip(
+            label: const Text('Blackout'),
+            selected: e.blackout,
+            showCheckmark: false,
+            selectedColor: s.error,
+            labelStyle: TextStyle(
+              color: e.blackout ? s.onError : s.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+            onSelected: (v) => e.blackout = v,
+          ),
+        ]),
       );
     });
+  }
+}
+
+/// Zeigt, wohin gesendet wird. Tippen öffnet die Dongle-Einstellungen.
+class ConnectionChip extends StatelessWidget {
+  const ConnectionChip({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppListener(
+      engine: false,
+      builder: (context, app) {
+        final ip = app.network.nodeIp;
+        final s = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: ActionChip(
+            avatar: Icon(Icons.circle, size: 10, color: ip == null ? s.outline : const Color(0xFF22A55B)),
+            label: Text(ip == null ? 'Kein Dongle' : ip),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NetworkScreen()),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

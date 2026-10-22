@@ -3,6 +3,7 @@ import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 
 import 'app_scope.dart';
+import 'home_screen.dart';
 
 /// Rohe Kanal-Fader, 512 pro Universe, horizontal scrollbar.
 class FadersScreen extends StatefulWidget {
@@ -26,7 +27,9 @@ class _FadersScreenState extends State<FadersScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    return Column(
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fader'), actions: const [ConnectionChip()]),
+      body: Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -85,6 +88,7 @@ class _FadersScreenState extends State<FadersScreen> {
           ),
         ),
       ],
+    ),
     );
   }
 }

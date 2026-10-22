@@ -1,16 +1,72 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Color, ThemeMode;
 
 import '../core/dmx/dmx_engine.dart';
 import '../data/builtin_profiles.dart';
 import '../data/storage.dart';
 import '../models/models.dart';
+import '../services/account_service.dart';
 
-/// Show-Daten (Patch, Szenen, Chaser, Netzwerk) + Bindeglied zur Engine.
+/// Show-Daten (Patch, Szenen, Chaser, Netzwerk), Einstellungen, Konto
+/// und das Bindeglied zur Engine.
 class AppState extends ChangeNotifier {
-  AppState(this.storage, this.engine);
+  AppState(this.storage, this.engine, this.account);
 
   final Storage storage;
   final DmxEngine engine;
+  final AccountBackend account;
+
+  // ---------- Einstellungen ----------
+
+  ThemeMode themeMode = ThemeMode.light;
+
+  void setThemeMode(ThemeMode m) {
+    themeMode = m;
+    storage.saveString('themeMode', m.name);
+    notifyListeners();
+  }
+
+  // ---------- Konto & Freischaltungen ----------
+
+  UserAccount? user;
+  Set<String> entitlements = {};
+
+  bool isUnlocked(FixtureProfile p) => p.requires == null || entitlements.contains(p.requires);
+
+  Future<void> restoreAccount() async {
+    user = await account.restoreSession();
+    entitlements = user == null ? {} : await account.fetchEntitlements(user!);
+    notifyListeners();
+  }
+
+  Future<void> signIn(String email, String password) async {
+    user = await account.signIn(email, password);
+    entitlements = await account.fetchEntitlements(user!);
+    notifyListeners();
+  }
+
+  Future<void> register(String name, String email, String password) async {
+    user = await account.register(name, email, password);
+    entitlements = await account.fetchEntitlements(user!);
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await account.signOut();
+    user = null;
+    entitlements = {};
+    notifyListeners();
+  }
+
+  /// Gibt die neu freigeschalteten Pakete zurück.
+  Future<List<FeaturePack>> redeemCode(String code) async {
+    final u = user;
+    if (u == null) throw const AccountException('Bitte zuerst anmelden.');
+    final added = await account.redeemCode(u, code);
+    entitlements = {...entitlements, ...added};
+    notifyListeners();
+    return featurePacks.where((p) => added.contains(p.id)).toList();
+  }
 
   final List<FixtureProfile> customProfiles = [];
   final List<Fixture> fixtures = [];
@@ -21,6 +77,8 @@ class AppState extends ChangeNotifier {
   NetworkSettings get network => engine.settings;
 
   void load() {
+    final tm = storage.loadString('themeMode');
+    themeMode = ThemeMode.values.firstWhere((m) => m.name == tm, orElse: () => ThemeMode.light);
     customProfiles.addAll(storage.loadProfiles());
     fixtures.addAll(storage.loadFixtures());
     scenes.addAll(storage.loadScenes());
@@ -200,6 +258,63 @@ class AppState extends ChangeNotifier {
       }
       setFixtureValues([f], values);
     }
+  }
+
+  /// Aktuelle Lichtfarbe eines Geräts für Vorschauen (null = keine Farbkanäle).
+  Color? fixtureColor(Fixture f) {
+    final p = profileOf(f);
+    if (p == null || !p.hasColor) return null;
+    int v(ChannelType t) => fixtureValue(f, t) ?? 0;
+    final w = v(ChannelType.white);
+    int c(int x) => x + w > 255 ? 255 : x + w;
+    return Color.fromARGB(255, c(v(ChannelType.red)), c(v(ChannelType.green)), c(v(ChannelType.blue)));
+  }
+
+  /// Helligkeit 0..1 (Dimmer, sonst hellster Farbkanal).
+  double fixtureLevel(Fixture f) {
+    final p = profileOf(f);
+    if (p == null) return 0;
+    final dim = fixtureValue(f, ChannelType.dimmer);
+    if (dim != null) return dim / 255;
+    var m = 0;
+    for (var i = 0; i < p.channels.length; i++) {
+      if (p.channels[i].type.isColor || p.channels[i].type == ChannelType.generic) {
+        final x = engine.getChannel(f.universe, f.address - 1 + i);
+        if (x > m) m = x;
+      }
+    }
+    return m / 255;
+  }
+
+  /// Alle Geräte an: Dimmer voll, Geräte ohne Farbe/Dimmer-Wert auf Weiß.
+  void allOn([Iterable<Fixture>? list]) {
+    for (final f in list ?? fixtures) {
+      final p = profileOf(f);
+      if (p == null) continue;
+      if (p.has(ChannelType.dimmer)) setFixtureValues([f], {ChannelType.dimmer: 255});
+      final col = fixtureColor(f);
+      if (p.hasColor && (col == null || (col.r == 0 && col.g == 0 && col.b == 0))) {
+        setFixtureColor([f], 255, 255, 255);
+      }
+      if (!p.hasColor && !p.has(ChannelType.dimmer)) setFixtureChannel([f], 0, 255);
+    }
+  }
+
+  /// Alle Geräte aus: Dimmer- und Farbkanäle auf 0, Positionen bleiben.
+  void allOff([Iterable<Fixture>? list]) {
+    final out = <(int, int, int)>[];
+    for (final f in list ?? fixtures) {
+      final p = profileOf(f);
+      if (p == null) continue;
+      for (var i = 0; i < p.channels.length; i++) {
+        final t = p.channels[i].type;
+        if (t == ChannelType.dimmer || t.isColor || t == ChannelType.strobe ||
+            (p.channels.length == 1)) {
+          out.add((f.universe, f.address - 1 + i, 0));
+        }
+      }
+    }
+    engine.setMany(out);
   }
 
   // ---------- Szenen ----------

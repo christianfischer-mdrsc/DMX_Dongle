@@ -45,12 +45,16 @@ class FixtureProfile {
   final List<ChannelDef> channels;
   final bool builtIn;
 
+  /// Paket-ID, die freigeschaltet sein muss (null = frei verfügbar).
+  final String? requires;
+
   const FixtureProfile({
     required this.id,
     required this.manufacturer,
     required this.name,
     required this.channels,
     this.builtIn = false,
+    this.requires,
   });
 
   int get footprint => channels.length;
@@ -70,6 +74,7 @@ class FixtureProfile {
         'manufacturer': manufacturer,
         'name': name,
         'channels': channels.map((c) => c.toJson()).toList(),
+        if (requires != null) 'requires': requires,
       };
   factory FixtureProfile.fromJson(Map<String, dynamic> j) => FixtureProfile(
         id: j['id'] as String,
@@ -78,6 +83,7 @@ class FixtureProfile {
         channels: (j['channels'] as List)
             .map((c) => ChannelDef.fromJson(c as Map<String, dynamic>))
             .toList(),
+        requires: j['requires'] as String?,
       );
 }
 

@@ -11,12 +11,25 @@ class ScenesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const DefaultTabController(
       length: 2,
-      child: Column(children: [
-        TabBar(tabs: [Tab(text: 'Szenen'), Tab(text: 'Chaser')]),
-        Expanded(child: TabBarView(children: [_SceneTab(), _ChaseTab()])),
-      ]),
+      child: Scaffold(
+        appBar: _ScenesAppBar(),
+        body: TabBarView(children: [_SceneTab(), _ChaseTab()]),
+      ),
     );
   }
+}
+
+class _ScenesAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _ScenesAppBar();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 48);
+
+  @override
+  Widget build(BuildContext context) => AppBar(
+        title: const Text('Szenen'),
+        bottom: const TabBar(tabs: [Tab(text: 'Szenen'), Tab(text: 'Abläufe')]),
+      );
 }
 
 // ---------------- Szenen ----------------
@@ -37,7 +50,7 @@ class _SceneTab extends StatelessWidget {
         backgroundColor: Colors.transparent,
         floatingActionButton: FloatingActionButton.extended(
           icon: const Icon(Icons.save_alt),
-          label: const Text('Aktuellen Zustand speichern'),
+          label: const Text('Szene speichern'),
           onPressed: () => _save(context, app),
         ),
         body: app.scenes.isEmpty

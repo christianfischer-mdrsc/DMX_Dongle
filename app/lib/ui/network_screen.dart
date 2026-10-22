@@ -70,7 +70,9 @@ class _NetworkScreenState extends State<NetworkScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppListener(
+    return Scaffold(
+      appBar: AppBar(title: const Text('Dongle & Netzwerk')),
+      body: AppListener(
       engine: false,
       builder: (context, app) {
         final s = app.network;
@@ -169,6 +171,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
           ],
         );
       },
+    ),
     );
   }
 }

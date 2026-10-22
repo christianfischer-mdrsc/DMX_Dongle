@@ -42,6 +42,8 @@ app/
 
 ## Hardware (ESP32-Prototyp)
 
+Vollständiger Schaltplan mit Stückliste: `hardware/schaltplan.html` (im Browser öffnen). Versorgung über USB aus einer Powerbank.
+
 Pro DMX-Ausgang ein RS485-Transceiver (MAX485, SN75176 oder besser isoliert: ADM2587E).
 
 | ESP32 | MAX485 Port A | MAX485 Port B |
@@ -101,6 +103,12 @@ flutter run                             # Handy per USB anschließen
 - **Chaser:** Szenen als Schritte mit Fade- und Haltezeit, sortierbar, mit Schleife.
 - **Unten immer:** Grandmaster (wirkt auf Dimmer-Kanäle, bei Geräten ohne Dimmer auf die Farben) und Blackout.
 - **Netzwerk:** „Suchen“ schickt ArtPoll, gefundenen Dongle mit „Nutzen“ übernehmen. Anzeige der gesendeten Pakete/s.
+- **Einstellungen:** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Freischaltungen per Code.
+
+### Konto & Freischaltung
+`lib/services/account_service.dart` definiert `AccountBackend`. Aktuell läuft `DemoAccountBackend` lokal (Testcode `DMX-PRO-DEMO`).
+Für den echten Betrieb ein Server-Backend implementieren (Supabase/Firebase/eigene API): Login, `fetchEntitlements`, `redeemCode`.
+Codes werden dann nur serverseitig geprüft und an das Konto gebunden. Gesperrte Profile tragen `requires: 'pack.xyz'`.
 
 Senden: geänderte Universen sofort, sonst alle 800 ms Keep-Alive (Art-Net-Empfehlung, und schont das WLAN).
 

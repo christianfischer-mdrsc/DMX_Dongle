@@ -55,4 +55,7 @@ class Storage {
   Future<void> saveProfiles(List<FixtureProfile> v) =>
       _save(_kProfiles, v.map((e) => e.toJson()).toList());
   Future<void> saveNetwork(NetworkSettings v) => _save(_kNetwork, v.toJson());
+
+  String? loadString(String key) => _p.getString('setting.$key');
+  Future<void> saveString(String key, String value) => _p.setString('setting.$key', value);
 }
