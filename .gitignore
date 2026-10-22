@@ -1,0 +1,8 @@
+# Firmware
+firmware/.pio/
+firmware/test/host/test_core
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins*
+app/pubspec.lock
