@@ -13,6 +13,7 @@ class ArtNetTransportIo implements DmxTransport {
   final Map<int, int> _seq = {};
   final _replies = StreamController<ArtNetNode>.broadcast();
   int _sent = 0;
+  int _errors = 0;
 
   @override
   String? target;
@@ -22,6 +23,9 @@ class ArtNetTransportIo implements DmxTransport {
 
   @override
   int get packetsSent => _sent;
+
+  @override
+  int get sendErrors => _errors;
 
   @override
   Future<void> open() async {
@@ -51,6 +55,24 @@ class ArtNetTransportIo implements DmxTransport {
     _socket = null;
   }
 
+  @override
+  Future<void> reopen() async {
+    await close();
+    await open();
+  }
+
+  void _send(List<int> packet, InternetAddress to) {
+    try {
+      if (_socket!.send(packet, to, ArtNet.port) > 0) {
+        _sent++;
+      } else {
+        _errors++;
+      }
+    } on SocketException {
+      _errors++;
+    }
+  }
+
   InternetAddress get _dest => InternetAddress.tryParse(target ?? '') ??
       InternetAddress('255.255.255.255');
 
@@ -60,22 +82,22 @@ class ArtNetTransportIo implements DmxTransport {
     if (s == null) return;
     final seq = ((_seq[portAddress] ?? 0) % 255) + 1; // 1..255, 0 = aus
     _seq[portAddress] = seq;
-    s.send(ArtNet.buildDmx(portAddress, seq, data), _dest, ArtNet.port);
-    _sent++;
+    _send(ArtNet.buildDmx(portAddress, seq, data), _dest);
   }
 
   @override
   Future<List<ArtNetNode>> discover(
       {Duration timeout = const Duration(seconds: 2)}) async {
-    await open();
+    // Frischer Socket: hängt sicher am aktuellen Netz (WLAN-Wechsel seit App-Start)
+    await reopen();
     final found = <String, ArtNetNode>{};
     final sub = _replies.stream.listen((n) => found[n.ip] = n);
     final poll = ArtNet.buildPoll();
-    _socket!.send(poll, InternetAddress('255.255.255.255'), ArtNet.port);
+    _send(poll, InternetAddress('255.255.255.255'));
     // Typisches AP-Netz des Dongles zusätzlich direkt anfragen
-    _socket!.send(poll, InternetAddress('192.168.4.1'), ArtNet.port);
+    _send(poll, InternetAddress('192.168.4.1'));
     if (target != null && InternetAddress.tryParse(target!) != null) {
-      _socket!.send(poll, InternetAddress(target!), ArtNet.port);
+      _send(poll, InternetAddress(target!));
     }
     await Future.delayed(timeout);
     await sub.cancel();

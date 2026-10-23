@@ -14,9 +14,13 @@ class _NullTransport implements DmxTransport {
   @override
   int get packetsSent => 0;
   @override
+  int get sendErrors => 0;
+  @override
   Future<void> open() async {}
   @override
   Future<void> close() async {}
+  @override
+  Future<void> reopen() async {}
   @override
   void sendDmx(int portAddress, Uint8List data) {}
   @override

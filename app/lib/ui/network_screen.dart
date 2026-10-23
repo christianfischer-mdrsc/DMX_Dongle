@@ -84,7 +84,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 leading: Icon(Icons.circle,
                     size: 14, color: _rate > 0 ? Colors.greenAccent : Colors.grey),
                 title: Text(s.nodeIp == null ? 'Ziel: Broadcast' : 'Ziel: ${s.nodeIp}'),
-                subtitle: Text('$_rate Art-Net Pakete/s gesendet'),
+                subtitle: Text('$_rate Art-Net Pakete/s gesendet'
+                    '${app.engine.transport.sendErrors > 0 ? ' · ${app.engine.transport.sendErrors} Sendefehler' : ''}'),
               ),
             ),
             const SizedBox(height: 16),

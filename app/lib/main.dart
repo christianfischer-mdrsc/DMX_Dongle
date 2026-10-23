@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/dmx/dmx_engine.dart';
 import 'core/transport/dmx_transport.dart';
@@ -14,6 +15,11 @@ Future<void> main() async {
   final storage = Storage();
   await storage.init();
   final engine = DmxEngine(DmxTransport.create(), storage.loadNetwork());
+  // Android meldet, wenn die App ans WLAN gebunden wurde (MainActivity.kt).
+  // Sockets hängen am Netz von ihrer Erzeugung, also neu anlegen.
+  const MethodChannel('dmx_control/network').setMethodCallHandler((call) async {
+    if (call.method == 'networkChanged') await engine.transport.reopen();
+  });
   final app = AppState(storage, engine, DemoAccountBackend())..load();
   await app.restoreAccount();
   await engine.start();

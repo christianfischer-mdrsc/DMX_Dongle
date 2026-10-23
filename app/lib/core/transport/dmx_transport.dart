@@ -14,6 +14,9 @@ abstract class DmxTransport {
   Future<void> close();
   bool get isOpen;
 
+  /// Socket neu anlegen, z.B. nachdem Android die App an ein anderes Netz gebunden hat.
+  Future<void> reopen();
+
   /// Ziel: IP des Nodes, oder null = Broadcast.
   String? target;
 
@@ -25,6 +28,9 @@ abstract class DmxTransport {
       {Duration timeout = const Duration(seconds: 2)});
 
   int get packetsSent;
+
+  /// Pakete, die das Betriebssystem nicht annehmen wollte.
+  int get sendErrors;
 
   factory DmxTransport.create() => impl.createTransport();
 }
