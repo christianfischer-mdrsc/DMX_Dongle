@@ -10,6 +10,7 @@
 #include "board_config.h"
 #include "dmx_node.h"
 #include "dmx_uart_esp32.h"
+#include "usb_mirror.h"
 
 namespace {
 
@@ -17,8 +18,8 @@ struct ArduinoClock : dmx::IClock {
   uint32_t millis() const override { return ::millis(); }
 } gClock;
 
-DmxUartEsp32 gPortA(DMX_A_UART, DMX_A_TX, DMX_A_DE);
-DmxUartEsp32 gPortB(DMX_B_UART, DMX_B_TX, DMX_B_DE);
+DmxUartEsp32 gPortA(DMX_A_UART, DMX_A_TX, DMX_A_DE, 0);
+DmxUartEsp32 gPortB(DMX_B_UART, DMX_B_TX, DMX_B_DE, 1);
 dmx::IDmxOutput* gOutputs[DMX_NUM_PORTS] = {&gPortA, &gPortB};
 dmx::DmxNode gNode(gOutputs, DMX_NUM_PORTS, gClock);
 
@@ -30,6 +31,10 @@ uint8_t gRx[600];
 uint8_t gTx[artnet::kPollReplySize];
 bool gApMode = false;
 uint32_t gLedOffAt = 0;
+
+// Diagnose: empfangene UDP-Pakete pro Sekunde (Log im Simulator-Tab "Dongle")
+uint32_t gUdpCount = 0, gDmxCount = 0, gUdpStatAt = 0;
+IPAddress gUdpLastFrom;
 
 // ---------- Konfiguration (NVS) ----------
 
@@ -74,6 +79,17 @@ void startWifi(const String& ssid, const String& pass) {
   WiFi.macAddress(mac);
   char apName[32];
   snprintf(apName, sizeof(apName), "DMX-Dongle-%02X%02X", mac[4], mac[5]);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    const uint8_t* m = info.wifi_ap_staconnected.mac;
+    Serial.printf("[WLAN] Client verbunden: %02X:%02X:%02X:%02X:%02X:%02X\n", m[0], m[1], m[2],
+                  m[3], m[4], m[5]);
+  }, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    Serial.printf("[WLAN] Client hat IP %s\n",
+                  IPAddress(info.wifi_ap_staipassigned.ip.addr).toString().c_str());
+  }, ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t) { Serial.println("[WLAN] Client getrennt"); },
+               ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
   WiFi.mode(WIFI_AP);
   WiFi.softAP(apName, AP_PASSWORD);
   WiFi.setSleep(false);
@@ -153,11 +169,15 @@ void pollUdp() {
     if (len <= 0) return;
     int n = gUdp.read(gRx, sizeof(gRx));
     if (n <= 0) continue;
+    ++gUdpCount;
+    gUdpLastFrom = gUdp.remoteIP();
     switch (gNode.handlePacket(gRx, static_cast<size_t>(n))) {
       case dmx::PacketResult::PollReceived:
+        Serial.printf("[ArtNet] ArtPoll von %s -> Reply\n", gUdp.remoteIP().toString().c_str());
         sendPollReply(gUdp.remoteIP());
         break;
       case dmx::PacketResult::DmxApplied:
+        ++gDmxCount;
         digitalWrite(STATUS_LED, HIGH);
         gLedOffAt = millis() + 30;
         break;
@@ -187,7 +207,8 @@ void checkResetButton() {
 }  // namespace
 
 void setup() {
-  Serial.begin(115200);
+  Serial.setTxBufferSize(4096);  // vor begin()!
+  Serial.begin(USB_MIRROR_BAUD);
   pinMode(STATUS_LED, OUTPUT);
   pinMode(RESET_BTN, INPUT_PULLUP);
 
@@ -208,12 +229,25 @@ void setup() {
 
   Serial.printf("[DMX] Net %u Sub %u, Universen A=%u B=%u\n", cfg.net, cfg.subnet,
                 cfg.universe[0], cfg.universe[1]);
+
+  for (uint8_t i = 0; i < DMX_NUM_PORTS; ++i)
+    usbmirror::setPortAddress(i, artnet::portAddress(cfg.net, cfg.subnet, cfg.universe[i]));
+  char hello[96];
+  snprintf(hello, sizeof hello, "%s · %s", cfg.shortName, localIp().toString().c_str());
+  usbmirror::begin(hello);
 }
 
 void loop() {
   pollUdp();
   gWeb.handleClient();
   checkResetButton();
+  if (millis() - gUdpStatAt >= 1000) {
+    if (gUdpCount)
+      Serial.printf("[ArtNet] %u UDP-Pakete/s (%u DMX), zuletzt von %s\n", gUdpCount, gDmxCount,
+                    gUdpLastFrom.toString().c_str());
+    gUdpCount = gDmxCount = 0;
+    gUdpStatAt = millis();
+  }
   if (gLedOffAt && millis() > gLedOffAt) {
     digitalWrite(STATUS_LED, LOW);
     gLedOffAt = 0;

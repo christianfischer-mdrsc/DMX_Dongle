@@ -7,7 +7,7 @@
 
 class DmxUartEsp32 : public dmx::IDmxOutput {
  public:
-  DmxUartEsp32(uart_port_t port, int txPin, int dePin);
+  DmxUartEsp32(uart_port_t port, int txPin, int dePin, uint8_t mirrorPort);
   bool begin(const char* taskName);
   void write(const uint8_t* data, uint16_t length) override;
   uint32_t framesSent() const { return framesSent_; }
@@ -19,6 +19,7 @@ class DmxUartEsp32 : public dmx::IDmxOutput {
   uart_port_t port_;
   int txPin_;
   int dePin_;
+  uint8_t mirrorPort_;  // Index für den USB-Spiegel
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   uint8_t shared_[dmx::kUniverseSize + 1] = {0};  // [0] = Startcode
   uint8_t frame_[dmx::kUniverseSize + 1] = {0};

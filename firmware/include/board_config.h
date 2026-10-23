@@ -24,3 +24,9 @@
 // Access-Point, wenn kein WLAN konfiguriert / erreichbar
 #define AP_PASSWORD "dmxdongle"   // min. 8 Zeichen
 #define STA_TIMEOUT_MS 15000
+
+// USB-Spiegel für den Windows-Simulator (DmxSimulator)
+#define USB_MIRROR_ENABLED   1        // 0 = komplett aus, kein Overhead
+#define USB_MIRROR_BAUD      921600
+#define USB_MIRROR_MAX_HZ    30       // max. Pakete/s pro Ausgang
+#define USB_MIRROR_MAX_PORTS 2

@@ -123,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('DMX Control'),
-                  subtitle: Text('Version 0.2 · Art-Net 4'),
+                  subtitle: Text('Version 0.2.1 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(

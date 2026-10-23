@@ -1,5 +1,7 @@
 #include "dmx_uart_esp32.h"
 
+#include "usb_mirror.h"
+
 // DMX512 Timing (ANSI E1.11):
 //   Break        >= 92 µs  (wir: 176 µs, wie viele Pulte)
 //   Mark After   >= 12 µs
@@ -8,8 +10,8 @@
 static constexpr uint32_t kBreakUs = 176;
 static constexpr uint32_t kMabUs = 12;
 
-DmxUartEsp32::DmxUartEsp32(uart_port_t port, int txPin, int dePin)
-    : port_(port), txPin_(txPin), dePin_(dePin) {}
+DmxUartEsp32::DmxUartEsp32(uart_port_t port, int txPin, int dePin, uint8_t mirrorPort)
+    : port_(port), txPin_(txPin), dePin_(dePin), mirrorPort_(mirrorPort) {}
 
 bool DmxUartEsp32::begin(const char* taskName) {
   pinMode(dePin_, OUTPUT);
@@ -59,5 +61,6 @@ void DmxUartEsp32::run() {
 
     uart_write_bytes(port_, reinterpret_cast<const char*>(frame_), sizeof(frame_));
     framesSent_ = framesSent_ + 1;
+    usbmirror::onFrame(mirrorPort_, frame_ + 1, dmx::kUniverseSize);  // ohne Startcode
   }
 }
