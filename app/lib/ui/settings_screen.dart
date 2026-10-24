@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/account_service.dart';
 import '../state/app_state.dart';
+import 'admin_screen.dart';
 import 'app_scope.dart';
 import 'network_screen.dart';
 
@@ -53,6 +54,21 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (app.isAdmin) ...[
+                const SizedBox(height: 12),
+                Card(
+                  color: s.primaryContainer,
+                  child: ListTile(
+                    leading: Icon(Icons.admin_panel_settings_outlined, color: s.onPrimaryContainer),
+                    title: Text('Admin-Bereich',
+                        style: TextStyle(color: s.onPrimaryContainer, fontWeight: FontWeight.w700)),
+                    subtitle: Text('Codes, Nutzer, Hinweise, Protokoll',
+                        style: TextStyle(color: s.onPrimaryContainer)),
+                    trailing: Icon(Icons.chevron_right, color: s.onPrimaryContainer),
+                    onTap: () => push(const AdminScreen()),
+                  ),
+                ),
+              ],
               const _Header('Verbindung'),
               _Group(children: [
                 ListTile(
@@ -120,10 +136,16 @@ class SettingsScreen extends StatelessWidget {
               ]),
               const _Header('Über'),
               _Group(children: [
+                if (app.supportEmail.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.support_agent_outlined),
+                    title: const Text('Hilfe & Kontakt'),
+                    subtitle: SelectableText(app.supportEmail),
+                  ),
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('DMX Control'),
-                  subtitle: Text('Version 0.3.0 · Art-Net 4'),
+                  subtitle: Text('Version 0.4.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(

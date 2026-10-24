@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'admin_api.dart';
+
 /// Angemeldeter Nutzer.
 class UserAccount {
   final String id;
@@ -80,6 +82,13 @@ abstract class AccountBackend {
 
   /// Löst einen Freischaltcode ein. Liefert die neu freigeschalteten Pakete.
   Future<Set<String>> redeemCode(UserAccount user, String code);
+
+  /// Admin-Funktionen (null im Testmodus).
+  AdminApi? get admin;
+  Future<bool> checkIsAdmin();
+
+  /// Öffentliche Einstellungen vom Server, z. B. der Hinweis an alle.
+  Future<Map<String, dynamic>> fetchAppSettings();
 }
 
 /// Lokales Demo-Backend: speichert alles auf dem Gerät.
@@ -99,6 +108,15 @@ class DemoAccountBackend implements AccountBackend {
 
   @override
   bool get usesEmailCodes => false;
+
+  @override
+  AdminApi? get admin => null;
+
+  @override
+  Future<bool> checkIsAdmin() async => false;
+
+  @override
+  Future<Map<String, dynamic>> fetchAppSettings() async => const {};
 
   @override
   Future<UserAccount> verifyEmail(String email, String code) =>

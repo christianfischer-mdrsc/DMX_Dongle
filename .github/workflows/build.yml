@@ -77,7 +77,10 @@ jobs:
       - name: Schema einspielen (zweimal, prüft Wiederholbarkeit)
         run: |
           psql -v ON_ERROR_STOP=1 -q -f supabase/tests/local_stub.sql
-          psql -v ON_ERROR_STOP=1 -q -f supabase/migrations/20261024000000_licensing.sql
-          psql -v ON_ERROR_STOP=1 -q -f supabase/migrations/20261024000000_licensing.sql
+          for f in supabase/migrations/*.sql supabase/migrations/*.sql; do
+            psql -v ON_ERROR_STOP=1 -q -f "$f"
+          done
       - name: Datenbank-Tests
-        run: psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_licensing.sql
+        run: |
+          psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_licensing.sql
+          psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_admin.sql

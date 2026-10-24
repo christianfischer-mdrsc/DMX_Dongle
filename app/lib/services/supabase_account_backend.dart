@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/backend_config.dart';
 import 'account_service.dart';
+import 'admin_api.dart';
 
 /// Echter Konto-Server über Supabase.
 ///
@@ -94,6 +95,9 @@ class SupabaseAccountBackend implements AccountBackend {
       throw AccountException('Anmeldung fehlgeschlagen: ${e.message}');
     }
     if (e is PostgrestException) {
+      if (e.code == '42501') throw const AccountException('Dafür fehlen dir die Rechte.');
+      // Eigene Meldungen aus den Datenbank-Funktionen sind schon deutsch
+      if (e.code == 'P0001') throw AccountException(e.message);
       throw AccountException('Serverfehler: ${e.message}');
     }
     // SocketException, ClientException, Timeouts …
@@ -107,6 +111,18 @@ class SupabaseAccountBackend implements AccountBackend {
       _fail(e);
     }
   }
+
+  @override
+  late final AdminApi admin = AdminApi(_sb);
+
+  @override
+  Future<bool> checkIsAdmin() => _guard(() async => (await _sb.rpc('is_admin')) == true);
+
+  @override
+  Future<Map<String, dynamic>> fetchAppSettings() => _guard(() async {
+        final rows = await _sb.from('app_settings').select('key, value');
+        return {for (final r in rows) r['key'] as String: r['value']};
+      });
 
   // ---------- Sitzung ----------
 
@@ -222,4 +238,13 @@ class SupabaseAccountBackend implements AccountBackend {
             throw const AccountException('Dieser Code ist ungültig. Bitte Schreibweise prüfen.');
         }
       });
+}
+
+/// Für [AdminApi]: Server-Fehler in verständliche Meldungen übersetzen.
+Future<T> guardSupabase<T>(Future<T> Function() f) async {
+  try {
+    return await f().timeout(const Duration(seconds: 20));
+  } catch (e) {
+    SupabaseAccountBackend._fail(e);
+  }
 }

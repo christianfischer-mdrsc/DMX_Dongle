@@ -71,6 +71,8 @@ class _FixturesScreenState extends State<FixturesScreen> {
         body: app.fixtures.isEmpty
             ? _EmptyState(onAdd: () => _add(app))
             : CustomScrollView(slivers: [
+                if (app.announcement.isNotEmpty && !app.announcementDismissed)
+                  SliverToBoxAdapter(child: _Announcement(app: app)),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -113,6 +115,36 @@ class _FixturesScreenState extends State<FixturesScreen> {
               ]),
       );
     });
+  }
+}
+
+/// Hinweis an alle, gepflegt im Admin-Bereich.
+class _Announcement extends StatelessWidget {
+  const _Announcement({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Card(
+        color: s.secondaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+          child: Row(children: [
+            Icon(Icons.campaign_outlined, color: s.onSecondaryContainer),
+            const SizedBox(width: 12),
+            Expanded(child: Text(app.announcement, style: TextStyle(color: s.onSecondaryContainer))),
+            IconButton(
+              tooltip: 'Ausblenden',
+              icon: Icon(Icons.close, color: s.onSecondaryContainer),
+              onPressed: app.dismissAnnouncement,
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

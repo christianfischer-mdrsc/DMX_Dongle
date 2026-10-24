@@ -47,21 +47,67 @@ class AppState extends ChangeNotifier {
     storage.saveString(_entKey(u), e.join(','));
   }
 
+  // ---------- Admin & Hinweise vom Server ----------
+
+  /// Darf dieses Konto den Admin-Bereich öffnen? (Zwischengespeichert;
+  /// der Server prüft bei jeder Admin-Aktion trotzdem selbst.)
+  bool isAdmin = false;
+
+  /// Hinweis an alle Nutzer, gepflegt im Admin-Bereich.
+  String announcement = '';
+  String supportEmail = '';
+
+  String _adminKey(UserAccount u) => 'isAdmin.${u.id}';
+
+  bool get announcementDismissed =>
+      announcement.isNotEmpty && storage.loadString('announcement.dismissed') == announcement;
+
+  void dismissAnnouncement() {
+    storage.saveString('announcement.dismissed', announcement);
+    notifyListeners();
+  }
+
+  void _loadCachedSettings() {
+    announcement = storage.loadString('announcement') ?? '';
+    supportEmail = storage.loadString('supportEmail') ?? '';
+  }
+
+  /// Hinweis & Kontakt vom Server holen (auch ohne Anmeldung).
+  Future<void> refreshAppSettings() async {
+    try {
+      final m = await account.fetchAppSettings();
+      final a = m['announcement'];
+      announcement = (a is Map ? a['text'] as String? : a as String?)?.trim() ?? '';
+      final sEmail = m['support_email'];
+      supportEmail = (sEmail is String ? sEmail : '').trim();
+      storage.saveString('announcement', announcement);
+      storage.saveString('supportEmail', supportEmail);
+      notifyListeners();
+    } on AccountException {
+      // offline – letzter Stand bleibt
+    }
+  }
+
   /// Startet ohne zu warten: erst Zwischenspeicher, dann Server im Hintergrund.
   Future<void> restoreAccount() async {
+    _loadCachedSettings();
     user = await account.restoreSession();
     final u = user;
     entitlements = u == null ? {} : _cachedEntitlements(u);
+    isAdmin = u != null && storage.loadString(_adminKey(u)) == 'true';
     notifyListeners();
+    refreshAppSettings();
     if (u != null) refreshEntitlements();
   }
 
-  /// Holt die Freischaltungen vom Server. Offline bleibt der letzte Stand.
+  /// Holt Freischaltungen und Admin-Status vom Server. Offline bleibt der letzte Stand.
   Future<void> refreshEntitlements() async {
     final u = user;
     if (u == null) return;
     try {
       _setEntitlements(u, await account.fetchEntitlements(u));
+      isAdmin = await account.checkIsAdmin();
+      storage.saveString(_adminKey(u), isAdmin.toString());
       notifyListeners();
     } on AccountException {
       // offline – Zwischenspeicher gilt weiter
@@ -71,6 +117,7 @@ class AppState extends ChangeNotifier {
   Future<void> _afterLogin(UserAccount u) async {
     user = u;
     entitlements = _cachedEntitlements(u);
+    isAdmin = storage.loadString(_adminKey(u)) == 'true';
     notifyListeners();
     await refreshEntitlements();
   }
@@ -96,6 +143,7 @@ class AppState extends ChangeNotifier {
     await account.signOut();
     user = null;
     entitlements = {};
+    isAdmin = false;
     notifyListeners();
   }
 
@@ -105,6 +153,7 @@ class AppState extends ChangeNotifier {
     if (u != null) storage.saveString(_entKey(u), '');
     user = null;
     entitlements = {};
+    isAdmin = false;
     notifyListeners();
   }
 
