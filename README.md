@@ -1,4 +1,4 @@
-# DMX-Projekt: App + WLAN-Dongle
+# DMX Master: App + WLAN-Dongle
 
 Flutter-App (Android zuerst, später iOS/Web/Desktop) steuert über **Art-Net (UDP, WLAN)** einen selbstgebauten Dongle, der daraus echtes **DMX512** für die Lampen macht.
 
@@ -103,7 +103,12 @@ flutter run                             # Handy per USB anschließen
 - **Chaser:** Szenen als Schritte mit Fade- und Haltezeit, sortierbar, mit Schleife.
 - **Unten immer:** Grandmaster (wirkt auf Dimmer-Kanäle, bei Geräten ohne Dimmer auf die Farben) und Blackout.
 - **Netzwerk:** „Suchen“ schickt ArtPoll, gefundenen Dongle mit „Nutzen“ übernehmen. Anzeige der gesendeten Pakete/s.
-- **Einstellungen:** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Freischaltungen per Code.
+- **Einstellungen (Reiter „Mehr“):** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Freischaltungen per Code, Geräteprofile, Show sichern/laden.
+- **Live:** große Tasten für Effekte, Szenen, Abläufe; Tap-Tempo; Bildschirm bleibt an.
+- **Effekte** (`lib/core/dmx/effects.dart`): Regenbogen, Pulsieren, Lauflicht, Strobe, Flackern, Kreis – als Überlagerung vor Grandmaster/Blackout, im Takt oder frei. Tests: `test/effects_test.dart`.
+- **Gruppen, Lampe finden, eigene Profile, Show-Sicherung (JSON, `format: dmx-master-show`).**
+
+Logo-Quelle: `branding/logo.py` (erzeugt alle Icon-Größen), Vorschau `branding/dmx_master_icon_1024.png`. App-ID bleibt `de.dmxcontrol.dmx_control`, damit Updates über die alte Version installiert werden.
 
 ### Konto & Freischaltung (Supabase)
 Server: Supabase (Postgres + Login). Datenbank: `supabase/migrations/20261024000000_licensing.sql`, Tests: `supabase/tests/`.
