@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/backend_config.dart';
 import 'account_service.dart';
 
 /// Echter Konto-Server über Supabase.
@@ -21,7 +22,10 @@ class SupabaseAccountBackend implements AccountBackend {
   bool get isDemo => false;
 
   @override
-  bool get supportsPasswordReset => true;
+  bool get supportsPasswordReset => BackendConfig.emailCodes;
+
+  @override
+  bool get usesEmailCodes => BackendConfig.emailCodes;
 
   // ---------- Hilfen ----------
 

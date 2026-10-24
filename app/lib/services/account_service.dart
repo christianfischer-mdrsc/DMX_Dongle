@@ -58,6 +58,9 @@ abstract class AccountBackend {
   bool get isDemo;
   bool get supportsPasswordReset;
 
+  /// true = E-Mail enthält einen Code zum Eintippen, false = nur einen Link.
+  bool get usesEmailCodes;
+
   /// Gespeicherte Anmeldung wiederherstellen (funktioniert auch offline).
   Future<UserAccount?> restoreSession();
   Future<UserAccount> signIn(String email, String password);
@@ -93,6 +96,9 @@ class DemoAccountBackend implements AccountBackend {
 
   @override
   bool get supportsPasswordReset => false;
+
+  @override
+  bool get usesEmailCodes => false;
 
   @override
   Future<UserAccount> verifyEmail(String email, String code) =>

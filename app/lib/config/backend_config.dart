@@ -14,5 +14,10 @@ class BackendConfig {
   static const supabaseKey = String.fromEnvironment('SUPABASE_KEY',
       defaultValue: 'sb_publishable_XpXGZJRYaUWcfihBWmtUJg_k1W7aA7G');
 
+  /// true, sobald eigener Mailversand (SMTP) eingerichtet ist und die
+  /// E-Mail-Vorlagen {{ .Token }} enthalten: Dann Bestätigung und
+  /// Passwort-Reset per 6-stelligem Code. false = Bestätigung per Link.
+  static const emailCodes = bool.fromEnvironment('EMAIL_CODES', defaultValue: false);
+
   static bool get enabled => supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty;
 }

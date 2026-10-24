@@ -220,8 +220,12 @@ class _SignInScreenState extends State<SignInScreen> {
     } on AccountException catch (e) {
       if (!mounted) return;
       if (e.kind == AccountError.emailNotConfirmed) {
-        _go(_AuthStep.verify, info: 'Deine E-Mail ist noch nicht bestätigt. Gib den Code aus der '
-            'Bestätigungs-E-Mail ein oder lass dir einen neuen schicken.');
+        _go(_AuthStep.verify,
+            info: AppScope.of(context).account.usesEmailCodes
+                ? 'Deine E-Mail ist noch nicht bestätigt. Gib den Code aus der '
+                    'Bestätigungs-E-Mail ein oder lass dir einen neuen schicken.'
+                : 'Deine E-Mail ist noch nicht bestätigt. Tippe in der Bestätigungs-E-Mail '
+                    'auf den Link oder lass dir eine neue schicken.');
       } else {
         setState(() => _error = e.message);
       }
@@ -246,12 +250,21 @@ class _SignInScreenState extends State<SignInScreen> {
           if (done) {
             Navigator.pop(context);
           } else {
-            _go(_AuthStep.verify, info: 'Wir haben dir einen Bestätigungscode an $email geschickt.');
+            _go(_AuthStep.verify, info: app.account.usesEmailCodes
+                ? 'Wir haben dir einen Bestätigungscode an $email geschickt.'
+                : 'Wir haben dir eine E-Mail an $email geschickt. Tippe darin auf den Link '
+                    '„Confirm email address“ und komm dann hierher zurück.');
           }
         });
       case _AuthStep.verify:
         await _run(() async {
-          await app.verifyEmail(email, _code.text);
+          // Mit Code: direkt bestätigen. Ohne Code: Link wurde in der E-Mail
+          // angetippt → jetzt normal anmelden.
+          if (_code.text.trim().isNotEmpty) {
+            await app.verifyEmail(email, _code.text);
+          } else {
+            await app.signIn(email, _pw.text);
+          }
           if (mounted) Navigator.pop(context);
         });
       case _AuthStep.forgot:
@@ -280,7 +293,11 @@ class _SignInScreenState extends State<SignInScreen> {
               'hängen am Konto, nicht am Handy.'),
       _AuthStep.register => ('Konto erstellen', 'Konto erstellen',
           'Du bekommst danach eine E-Mail mit einem Code, um deine Adresse zu bestätigen.'),
-      _AuthStep.verify => ('E-Mail bestätigen', 'Bestätigen', ''),
+      _AuthStep.verify => (
+          'E-Mail bestätigen',
+          app.account.usesEmailCodes ? 'Bestätigen' : 'Ich habe bestätigt – anmelden',
+          ''
+        ),
       _AuthStep.forgot => ('Passwort vergessen', 'Code anfordern',
           'Wir schicken dir einen Code, mit dem du ein neues Passwort setzen kannst.'),
       _AuthStep.reset => ('Neues Passwort', 'Passwort speichern', ''),
@@ -288,8 +305,13 @@ class _SignInScreenState extends State<SignInScreen> {
     final showName = _step == _AuthStep.register;
     final showEmail = true;
     final emailLocked = _step == _AuthStep.verify || _step == _AuthStep.reset;
-    final showCode = _step == _AuthStep.verify || _step == _AuthStep.reset;
-    final showPw = _step == _AuthStep.signIn || _step == _AuthStep.register || _step == _AuthStep.reset;
+    final codes = app.account.usesEmailCodes;
+    final showCode = (_step == _AuthStep.verify && codes) || _step == _AuthStep.reset;
+    // Ohne Codes braucht der Bestätigungsschritt das Passwort zum Anmelden.
+    final showPw = _step == _AuthStep.signIn ||
+        _step == _AuthStep.register ||
+        _step == _AuthStep.reset ||
+        (_step == _AuthStep.verify && !codes);
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -385,9 +407,9 @@ class _SignInScreenState extends State<SignInScreen> {
                         ? null
                         : () => _run(() async {
                               await app.account.resendConfirmation(_email.text.trim());
-                              if (mounted) setState(() => _info = 'Neuer Code ist unterwegs.');
+                              if (mounted) setState(() => _info = 'Neue E-Mail ist unterwegs.');
                             }),
-                    child: const Text('Code erneut senden'),
+                    child: Text(app.account.usesEmailCodes ? 'Code erneut senden' : 'E-Mail erneut senden'),
                   ),
                   TextButton(onPressed: () => _go(_AuthStep.signIn), child: const Text('Zurück zur Anmeldung')),
                 ],
