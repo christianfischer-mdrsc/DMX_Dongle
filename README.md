@@ -105,12 +105,31 @@ flutter run                             # Handy per USB anschließen
 - **Netzwerk:** „Suchen“ schickt ArtPoll, gefundenen Dongle mit „Nutzen“ übernehmen. Anzeige der gesendeten Pakete/s.
 - **Einstellungen:** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Freischaltungen per Code.
 
-### Konto & Freischaltung
-`lib/services/account_service.dart` definiert `AccountBackend`. Aktuell läuft `DemoAccountBackend` lokal (Testcode `DMX-PRO-DEMO`).
-Für den echten Betrieb ein Server-Backend implementieren (Supabase/Firebase/eigene API): Login, `fetchEntitlements`, `redeemCode`.
-Codes werden dann nur serverseitig geprüft und an das Konto gebunden. Gesperrte Profile tragen `requires: 'pack.xyz'`.
+### Konto & Freischaltung (Supabase)
+Server: Supabase (Postgres + Login). Datenbank: `supabase/migrations/20261024000000_licensing.sql`, Tests: `supabase/tests/`.
 
-Senden: geänderte Universen sofort, sonst alle 800 ms Keep-Alive (Art-Net-Empfehlung, und schont das WLAN).
+**Einrichten**
+1. supabase.com → neues Projekt, Region *Central EU (Frankfurt)*.
+2. SQL Editor → Inhalt der Migration einfügen → Run.
+3. Authentication → Emails → Vorlagen *Confirm signup* und *Reset password*: `{{ .Token }}` einfügen (die App arbeitet mit 6-stelligen Codes statt Links).
+4. Project Settings → API Keys → *Project URL* und *Publishable key* in `app/lib/config/backend_config.dart` eintragen oder als GitHub-Secrets `SUPABASE_URL` / `SUPABASE_KEY` hinterlegen. **Nie** den Secret/Service-Key.
+5. Für echte Nutzer eigenen E-Mail-Versand einrichten (Authentication → SMTP, z. B. Brevo oder Resend). Der eingebaute Versand von Supabase schickt nur an Mitglieder des Projekt-Teams und nur wenige Mails pro Stunde.
+
+**Codes erzeugen** (SQL Editor):
+```sql
+-- 20 Einmal-Codes
+select * from admin_create_codes(array['pack.pro'], 20);
+-- 1 Code, 100× einlösbar, 30 Tage gültig
+select * from admin_create_codes(array['pack.pro'], 1, 100, now() + interval '30 days', 'Messe');
+-- Übersicht
+select * from code_overview;
+-- Code sperren
+update unlock_codes set active = false where code = 'ABCDEFGHJKMN';
+```
+
+**Regeln:** Ein Konto löst denselben Code nur einmal ein. Besitzt es schon alle Pakete eines Codes, wird der Code nicht verbraucht. Nach 10 falschen Codes pro Stunde ist das Konto für eine Stunde gesperrt. Freischaltungen werden auf dem Handy zwischengespeichert und funktionieren offline (z. B. am Dongle-WLAN).
+
+**Neues Paket:** Zeile in `packs` anlegen, gleiche ID als `requires:` am Profil in der App und in `featurePacks` eintragen.
 
 ---
 
