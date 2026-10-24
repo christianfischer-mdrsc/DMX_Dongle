@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_scope.dart';
 import 'faders_screen.dart';
 import 'fixtures_screen.dart';
+import 'live_screen.dart';
 import 'network_screen.dart';
 import 'scenes_screen.dart';
 import 'settings_screen.dart';
@@ -19,21 +20,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
-  static const _pages = [
-    FixturesScreen(),
-    ScenesScreen(),
-    FadersScreen(),
-    SettingsScreen(),
-  ];
+  static const _settingsTab = 4;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _tab, children: _pages),
+      body: IndexedStack(index: _tab, children: [
+        const FixturesScreen(),
+        LiveScreen(active: _tab == 1),
+        const ScenesScreen(),
+        const FadersScreen(),
+        const SettingsScreen(),
+      ]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_tab != 3) const MasterBar(),
+          if (_tab != _settingsTab) const MasterBar(),
           NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
@@ -42,6 +44,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icon(Icons.lightbulb_outline),
                   selectedIcon: Icon(Icons.lightbulb),
                   label: 'Steuern'),
+              NavigationDestination(
+                  icon: Icon(Icons.bolt_outlined),
+                  selectedIcon: Icon(Icons.bolt),
+                  label: 'Live'),
               NavigationDestination(
                   icon: Icon(Icons.auto_awesome_outlined),
                   selectedIcon: Icon(Icons.auto_awesome),
@@ -53,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
               NavigationDestination(
                   icon: Icon(Icons.settings_outlined),
                   selectedIcon: Icon(Icons.settings),
-                  label: 'Einstellungen'),
+                  label: 'Mehr'),
             ],
           ),
         ],

@@ -11,6 +11,8 @@ class Storage {
   static const _kChases = 'chases';
   static const _kProfiles = 'customProfiles';
   static const _kNetwork = 'network';
+  static const _kGroups = 'groups';
+  static const _kEffects = 'effects';
 
   late SharedPreferences _p;
 
@@ -35,6 +37,8 @@ class Storage {
   List<Scene> loadScenes() => _list(_kScenes, Scene.fromJson);
   List<Chase> loadChases() => _list(_kChases, Chase.fromJson);
   List<FixtureProfile> loadProfiles() => _list(_kProfiles, FixtureProfile.fromJson);
+  List<FixtureGroup> loadGroups() => _list(_kGroups, FixtureGroup.fromJson);
+  List<Effect> loadEffects() => _list(_kEffects, Effect.fromJson);
 
   NetworkSettings loadNetwork() {
     final raw = _p.getString(_kNetwork);
@@ -55,6 +59,10 @@ class Storage {
   Future<void> saveProfiles(List<FixtureProfile> v) =>
       _save(_kProfiles, v.map((e) => e.toJson()).toList());
   Future<void> saveNetwork(NetworkSettings v) => _save(_kNetwork, v.toJson());
+  Future<void> saveGroups(List<FixtureGroup> v) =>
+      _save(_kGroups, v.map((e) => e.toJson()).toList());
+  Future<void> saveEffects(List<Effect> v) =>
+      _save(_kEffects, v.map((e) => e.toJson()).toList());
 
   String? loadString(String key) => _p.getString('setting.$key');
   Future<void> saveString(String key, String value) => _p.setString('setting.$key', value);

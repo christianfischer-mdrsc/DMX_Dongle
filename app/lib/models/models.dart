@@ -169,21 +169,151 @@ class Chase {
   String name;
   bool loop;
   final List<ChaseStep> steps;
-  Chase({required this.id, required this.name, required this.steps, this.loop = true});
+
+  /// Im Takt: Schrittlänge folgt dem Tempo (BPM) statt Fade+Halten.
+  bool bpmSync;
+  double beatsPerStep;
+
+  Chase({
+    required this.id,
+    required this.name,
+    required this.steps,
+    this.loop = true,
+    this.bpmSync = false,
+    this.beatsPerStep = 1,
+  });
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         'loop': loop,
+        'bpmSync': bpmSync,
+        'beatsPerStep': beatsPerStep,
         'steps': steps.map((s) => s.toJson()).toList(),
       };
   factory Chase.fromJson(Map<String, dynamic> j) => Chase(
         id: j['id'] as String,
         name: j['name'] as String,
         loop: (j['loop'] as bool?) ?? true,
+        bpmSync: (j['bpmSync'] as bool?) ?? false,
+        beatsPerStep: (j['beatsPerStep'] as num?)?.toDouble() ?? 1,
         steps: (j['steps'] as List)
             .map((s) => ChaseStep.fromJson(s as Map<String, dynamic>))
             .toList(),
+      );
+}
+
+/// Feste Auswahl von Lampen, z. B. „Bühne links“.
+class FixtureGroup {
+  final String id;
+  String name;
+  final List<String> fixtureIds;
+  FixtureGroup({required this.id, required this.name, required this.fixtureIds});
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'fixtureIds': fixtureIds};
+  factory FixtureGroup.fromJson(Map<String, dynamic> j) => FixtureGroup(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        fixtureIds: [for (final f in (j['fixtureIds'] as List)) f as String],
+      );
+}
+
+enum EffectType {
+  rainbow('Regenbogen', 'Farben laufen durch'),
+  pulse('Pulsieren', 'Helligkeit atmet auf und ab'),
+  chase('Lauflicht', 'Licht wandert von Lampe zu Lampe'),
+  strobe('Strobe', 'Schnelles Blitzen'),
+  flicker('Flackern', 'Feuer oder Kerzenlicht'),
+  circle('Kreis', 'Moving Heads fahren Kreise');
+
+  const EffectType(this.label, this.hint);
+  final String label;
+  final String hint;
+
+  /// Sinnvolle Startwerte je Effekt.
+  ({double beats, double size, double spread, int? color}) get defaults => switch (this) {
+        EffectType.rainbow => (beats: 16, size: 1, spread: 1, color: null),
+        EffectType.pulse => (beats: 2, size: 0.8, spread: 0, color: null),
+        EffectType.chase => (beats: 4, size: 0, spread: 0, color: null),
+        EffectType.strobe => (beats: 0.5, size: 0.5, spread: 0, color: 0xFFFFFF),
+        EffectType.flicker => (beats: 8, size: 0.6, spread: 0, color: 0xFF7A1E),
+        EffectType.circle => (beats: 8, size: 0.3, spread: 0, color: null),
+      };
+}
+
+/// Gespeicherter Effekt. Läuft auf den Lampen [fixtureIds] als Überlagerung
+/// der normalen Werte; Gesamthelligkeit und Blackout gelten weiterhin.
+class Effect {
+  final String id;
+  String name;
+  EffectType type;
+  List<String> fixtureIds;
+
+  /// true = Zykluslänge in Schlägen ([beats]) des aktuellen Tempos,
+  /// false = feste Geschwindigkeit [cyclesPerMinute].
+  bool syncTempo;
+  double beats;
+  double cyclesPerMinute;
+
+  /// Stärke 0..1 (Hub beim Pulsieren, Größe des Kreises, Schweif beim Lauflicht …)
+  double size;
+
+  /// 0 = alle Lampen gleich, 1 = über alle Lampen verteilt
+  double spread;
+
+  /// 0xRRGGBB oder null (= Effekt-Standard / aktuelle Farbe)
+  int? color;
+
+  Effect({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.fixtureIds,
+    this.syncTempo = true,
+    this.beats = 4,
+    this.cyclesPerMinute = 30,
+    this.size = 1,
+    this.spread = 0,
+    this.color,
+  });
+
+  factory Effect.preset(EffectType type, List<String> fixtureIds) {
+    final d = type.defaults;
+    return Effect(
+      id: newId(),
+      name: type.label,
+      type: type,
+      fixtureIds: fixtureIds,
+      beats: d.beats,
+      size: d.size,
+      spread: d.spread,
+      color: d.color,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'type': type.name,
+        'fixtureIds': fixtureIds,
+        'syncTempo': syncTempo,
+        'beats': beats,
+        'cyclesPerMinute': cyclesPerMinute,
+        'size': size,
+        'spread': spread,
+        'color': color,
+      };
+  factory Effect.fromJson(Map<String, dynamic> j) => Effect(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        type: EffectType.values.byName(j['type'] as String),
+        fixtureIds: [for (final f in (j['fixtureIds'] as List)) f as String],
+        syncTempo: (j['syncTempo'] as bool?) ?? true,
+        beats: (j['beats'] as num?)?.toDouble() ?? 4,
+        cyclesPerMinute: (j['cyclesPerMinute'] as num?)?.toDouble() ?? 30,
+        size: (j['size'] as num?)?.toDouble() ?? 1,
+        spread: (j['spread'] as num?)?.toDouble() ?? 0,
+        color: j['color'] as int?,
       );
 }
 

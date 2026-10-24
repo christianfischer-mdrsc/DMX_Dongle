@@ -52,7 +52,7 @@ class DmxApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: app,
         builder: (context, _) => MaterialApp(
-          title: 'DMX Control',
+          title: 'DMX Master',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),

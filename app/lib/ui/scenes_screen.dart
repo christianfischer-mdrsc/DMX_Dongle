@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import 'app_scope.dart';
+import 'effect_editor.dart' show beatsLabel;
 
 class ScenesScreen extends StatelessWidget {
   const ScenesScreen({super.key});
@@ -202,7 +203,7 @@ class _ChaseTab extends StatelessWidget {
                             : app.playChase(c),
                       ),
                       title: Text(c.name),
-                      subtitle: Text('${c.steps.length} Schritte${c.loop ? ' · Schleife' : ''}'),
+                      subtitle: Text('${c.steps.length} Schritte${c.loop ? ' · Schleife' : ''}${c.bpmSync ? ' · im Takt' : ''}'),
                       onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => ChaseEditor(chase: c))),
                     ),
@@ -275,6 +276,27 @@ class _ChaseEditorState extends State<ChaseEditor> {
           value: c.loop,
           onChanged: (v) => setState(() => c.loop = v),
         ),
+        SwitchListTile(
+          title: const Text('Im Takt der Musik'),
+          subtitle: Text(c.bpmSync
+              ? 'Schritte wechseln nach dem Tempo der Live-Seite (Tap-Tempo)'
+              : 'Feste Fade- und Haltezeiten pro Schritt'),
+          value: c.bpmSync,
+          onChanged: (v) => setState(() => c.bpmSync = v),
+        ),
+        if (c.bpmSync)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: DropdownButtonFormField<double>(
+              initialValue: const [0.5, 1.0, 2.0, 4.0, 8.0].contains(c.beatsPerStep) ? c.beatsPerStep : 1.0,
+              decoration: const InputDecoration(labelText: 'Ein Schritt dauert'),
+              items: [
+                for (final b in const [0.5, 1.0, 2.0, 4.0, 8.0])
+                  DropdownMenuItem(value: b, child: Text(beatsLabel(b))),
+              ],
+              onChanged: (v) => setState(() => c.beatsPerStep = v ?? 1),
+            ),
+          ),
         Expanded(
           child: ReorderableListView.builder(
             padding: const EdgeInsets.only(bottom: 88),

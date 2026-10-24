@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import 'app_scope.dart';
+import 'effect_editor.dart';
 import 'fixture_control_screen.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
@@ -26,6 +27,93 @@ class _FixturesScreenState extends State<FixturesScreen> {
   void _toggle(String id) =>
       setState(() => _selected.contains(id) ? _selected.remove(id) : _selected.add(id));
 
+  Future<void> _saveGroup(AppState app, List<Fixture> chosen) async {
+    final ctrl = TextEditingController(text: 'Gruppe ${app.groups.length + 1}');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${chosen.length} Lampen als Gruppe speichern'),
+        content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Speichern')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    app.saveGroup(name, chosen.map((f) => f.id).toList());
+    setState(_selected.clear);
+  }
+
+  void _groupMenu(AppState app, FixtureGroup g) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(title: Text(g.name, style: Theme.of(ctx).textTheme.titleMedium)),
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('Steuern'),
+            onTap: () {
+              Navigator.pop(ctx);
+              final list = app.fixturesByIds(g.fixtureIds);
+              if (list.isNotEmpty) _open(list);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.auto_awesome_motion),
+            title: const Text('Effekt starten'),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => EffectEditor(fixtureIds: [...g.fixtureIds])));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Umbenennen'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              final ctrl = TextEditingController(text: g.name);
+              final name = await showDialog<String>(
+                context: context,
+                builder: (c2) => AlertDialog(
+                  title: const Text('Gruppe umbenennen'),
+                  content: TextField(controller: ctrl, autofocus: true),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(c2), child: const Text('Abbrechen')),
+                    FilledButton(onPressed: () => Navigator.pop(c2, ctrl.text.trim()), child: const Text('OK')),
+                  ],
+                ),
+              );
+              if (name != null && name.isNotEmpty) app.updateGroup(g, name: name);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.checklist),
+            title: const Text('Auswahl übernehmen'),
+            subtitle: const Text('Lampen der Gruppe wählen und bearbeiten'),
+            onTap: () {
+              Navigator.pop(ctx);
+              setState(() => _selected
+                ..clear()
+                ..addAll(g.fixtureIds));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('Gruppe löschen'),
+            subtitle: const Text('Die Lampen bleiben erhalten'),
+            onTap: () {
+              Navigator.pop(ctx);
+              app.deleteGroup(g);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
   void _add(AppState app) => showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -47,6 +135,22 @@ class _FixturesScreenState extends State<FixturesScreen> {
               : null,
           actions: selecting
               ? [
+                  IconButton(
+                    tooltip: 'Finden (blinken lassen)',
+                    icon: const Icon(Icons.flare),
+                    onPressed: () => app.identify(chosen),
+                  ),
+                  IconButton(
+                    tooltip: 'Effekt starten',
+                    icon: const Icon(Icons.auto_awesome_motion),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => EffectEditor(fixtureIds: chosen.map((f) => f.id).toList()))),
+                  ),
+                  IconButton(
+                    tooltip: 'Als Gruppe speichern',
+                    icon: const Icon(Icons.workspaces_outline),
+                    onPressed: () => _saveGroup(app, chosen),
+                  ),
                   IconButton(
                     tooltip: 'Alle wählen',
                     icon: const Icon(Icons.select_all),
@@ -90,6 +194,33 @@ class _FixturesScreenState extends State<FixturesScreen> {
                     ]),
                   ),
                 ),
+                if (app.groups.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 44,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        children: [
+                          for (final g in app.groups)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: GestureDetector(
+                                onLongPress: () => _groupMenu(app, g),
+                                child: ActionChip(
+                                  avatar: const Icon(Icons.workspaces_outline, size: 18),
+                                  label: Text('${g.name} (${g.fixtureIds.length})'),
+                                  onPressed: () {
+                                    final list = app.fixturesByIds(g.fixtureIds);
+                                    if (list.isNotEmpty) _open(list);
+                                  },
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
                   sliver: SliverGrid.builder(

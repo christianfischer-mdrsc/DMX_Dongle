@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/models.dart';
 import '../artnet/artnet_packet.dart';
 import '../transport/dmx_transport.dart';
+import 'effects.dart';
 
 /// Herzstück der App: hält alle Kanalwerte, rechnet Fades/Chaser/Grandmaster
 /// und schickt die Universen mit ~40 Hz an den Transport.
@@ -45,6 +46,11 @@ class DmxEngine extends ChangeNotifier {
   List<Scene?> _chaseScenes = const [];
   int _chaseIndex = 0;
   int _chaseStepStart = 0;
+
+  // Effekte & Tempo
+  final TapTempo tempo = TapTempo();
+  int _beatOrigin = 0;
+  final Map<String, _RunningEffect> _effects = {};
 
   int get universeCount => _prog.length;
   double get grandMaster => _grandMaster;
@@ -205,17 +211,24 @@ class DmxEngine extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
+  /// Dauer eines Schritts (Fade, Gesamt) – im Takt aus dem Tempo.
+  (int, int) _stepTiming(Chase c, ChaseStep step) {
+    if (!c.bpmSync) return (step.fadeMs, step.fadeMs + step.holdMs);
+    final total = (tempo.beatMs * c.beatsPerStep).round().clamp(50, 600000);
+    return (step.fadeMs < total ? step.fadeMs : total, total);
+  }
+
   void _enterStep(int now) {
-    final step = _chase!.steps[_chaseIndex];
+    final c = _chase!;
     _chaseStepStart = now;
-    _startFade(_chaseScenes[_chaseIndex], step.fadeMs);
+    _startFade(_chaseScenes[_chaseIndex], _stepTiming(c, c.steps[_chaseIndex]).$1);
   }
 
   void _advanceChase(int now) {
     final chase = _chase;
     if (chase == null) return;
     final step = chase.steps[_chaseIndex];
-    if (now - _chaseStepStart < step.fadeMs + step.holdMs) return;
+    if (now - _chaseStepStart < _stepTiming(chase, step).$2) return;
     _chaseIndex++;
     if (_chaseIndex >= chase.steps.length) {
       if (!chase.loop) {
@@ -227,6 +240,93 @@ class DmxEngine extends ChangeNotifier {
     _enterStep(now);
   }
 
+  // ---------- Tempo ----------
+
+  double get bpm => tempo.bpm;
+
+  set bpm(double v) {
+    tempo.bpm = v.clamp(30.0, 300.0);
+    notifyListeners();
+  }
+
+  /// Takt antippen: stellt das Tempo und setzt den Schlag auf „jetzt“.
+  void tap() {
+    final now = _clock.elapsedMilliseconds;
+    tempo.tap(now);
+    _beatOrigin = now;
+    notifyListeners();
+  }
+
+  /// 0..1 innerhalb des aktuellen Schlags (für eine blinkende Anzeige).
+  double get beatPhase {
+    final x = (_clock.elapsedMilliseconds - _beatOrigin) / tempo.beatMs;
+    return x - x.floorToDouble();
+  }
+
+  // ---------- Effekte ----------
+
+  bool isEffectRunning(String id) => _effects.containsKey(id);
+  Iterable<String> get runningEffects => _effects.keys;
+
+  void startEffect(Effect e, List<EffectTarget> targets) {
+    _effects[e.id] = _RunningEffect(e, targets, _clock.elapsedMilliseconds);
+    notifyListeners();
+  }
+
+  /// Parameter oder Lampen eines laufenden Effekts ändern, ohne neu zu starten.
+  void updateEffect(Effect e, List<EffectTarget> targets) {
+    final r = _effects[e.id];
+    if (r == null) return;
+    _effects[e.id] = _RunningEffect(e, targets, r.startMs, r.untilMs);
+  }
+
+  void stopEffect(String id) {
+    if (_effects.remove(id) != null) notifyListeners();
+  }
+
+  void stopAllEffects() {
+    _effects.removeWhere((k, _) => !k.startsWith('_'));
+    notifyListeners();
+  }
+
+  /// Lampen kurz weiß blinken lassen, um sie im Raum zu finden.
+  void identify(List<EffectTarget> targets, {int ms = 3000}) {
+    final now = _clock.elapsedMilliseconds;
+    final e = Effect(
+      id: '_identify',
+      name: 'Finden',
+      type: EffectType.strobe,
+      fixtureIds: const [],
+      syncTempo: false,
+      cyclesPerMinute: 240,
+      size: 0.5,
+      color: 0xFFFFFF,
+    );
+    _effects[e.id] = _RunningEffect(e, targets, now, now + ms);
+  }
+
+  void _applyEffects(int now, List<Uint8List> out) {
+    if (_effects.isEmpty) return;
+    _effects.removeWhere((_, r) => r.untilMs != null && now > r.untilMs!);
+    int read(int u, int ch) => u < _prog.length && ch >= 0 && ch < 512 ? _prog[u][ch] : 0;
+    void write(int u, int ch, int v) {
+      if (u < out.length && ch >= 0 && ch < 512) out[u][ch] = v;
+    }
+
+    for (final r in _effects.values) {
+      final e = r.effect;
+      final double phase;
+      if (e.syncTempo) {
+        final cycleMs = tempo.beatMs * (e.beats <= 0 ? 1 : e.beats);
+        phase = (now - _beatOrigin) / cycleMs;
+      } else {
+        final cycleMs = 60000 / (e.cyclesPerMinute <= 0 ? 1 : e.cyclesPerMinute);
+        phase = (now - r.startMs) / cycleMs;
+      }
+      renderEffect(e, r.targets, phase, read, write);
+    }
+  }
+
   // ---------- Ausgabe ----------
 
   void _onTick() {
@@ -234,8 +334,10 @@ class DmxEngine extends ChangeNotifier {
     _advanceChase(now);
     _advanceFade(now);
 
+    final base = [for (final u in _prog) Uint8List.fromList(u)];
+    _applyEffects(now, base);
     for (var u = 0; u < _prog.length; u++) {
-      final out = _computeOutput(u);
+      final out = _computeOutput(u, base[u]);
       final changed = !_equals(out, _lastSent[u]);
       if (changed || now - _lastSendMs[u] >= _keepAliveMs) {
         transport.sendDmx(portAddressFor(u), out);
@@ -251,8 +353,7 @@ class DmxEngine extends ChangeNotifier {
     }
   }
 
-  Uint8List _computeOutput(int u) {
-    final out = Uint8List.fromList(_prog[u]);
+  Uint8List _computeOutput(int u, Uint8List out) {
     if (_blackout) {
       final mask = _intensity[u];
       if (mask == null || mask.isEmpty) return Uint8List(512);
@@ -293,4 +394,12 @@ class DmxEngine extends ChangeNotifier {
     transport.close();
     super.dispose();
   }
+}
+
+class _RunningEffect {
+  _RunningEffect(this.effect, this.targets, this.startMs, [this.untilMs]);
+  final Effect effect;
+  final List<EffectTarget> targets;
+  final int startMs;
+  final int? untilMs;
 }

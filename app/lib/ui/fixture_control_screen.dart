@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import 'app_scope.dart';
+import 'effect_editor.dart';
 import 'fixtures_screen.dart';
 
 /// Steuert ein oder mehrere Geräte gleichzeitig. Werte werden vom ersten
@@ -24,6 +25,17 @@ class FixtureControlScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text(fixtures.length == 1 ? first.name : '${fixtures.length} Lampen'),
           actions: [
+            IconButton(
+              tooltip: 'Finden (blinken lassen)',
+              icon: const Icon(Icons.flare),
+              onPressed: () => app.identify(fixtures),
+            ),
+            IconButton(
+              tooltip: 'Effekt starten',
+              icon: const Icon(Icons.auto_awesome_motion),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => EffectEditor(fixtureIds: fixtures.map((f) => f.id).toList()))),
+            ),
             IconButton(
               tooltip: 'Einschalten',
               icon: const Icon(Icons.light_mode_outlined),

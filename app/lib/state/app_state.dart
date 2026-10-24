@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, ThemeMode;
 
 import '../core/dmx/dmx_engine.dart';
+import '../core/dmx/effects.dart';
 import '../data/builtin_profiles.dart';
 import '../data/storage.dart';
 import '../models/models.dart';
@@ -171,6 +172,8 @@ class AppState extends ChangeNotifier {
   final List<Fixture> fixtures = [];
   final List<Scene> scenes = [];
   final List<Chase> chases = [];
+  final List<FixtureGroup> groups = [];
+  final List<Effect> effects = [];
 
   List<FixtureProfile> get profiles => [...builtinProfiles, ...customProfiles];
   NetworkSettings get network => engine.settings;
@@ -182,6 +185,8 @@ class AppState extends ChangeNotifier {
     fixtures.addAll(storage.loadFixtures());
     scenes.addAll(storage.loadScenes());
     chases.addAll(storage.loadChases());
+    groups.addAll(storage.loadGroups());
+    effects.addAll(storage.loadEffects());
     _updateIntensityMask();
   }
 
@@ -262,14 +267,33 @@ class AppState extends ChangeNotifier {
 
   void removeFixture(Fixture f) {
     fixtures.remove(f);
+    for (final g in groups) {
+      g.fixtureIds.remove(f.id);
+    }
+    for (final e in effects) {
+      e.fixtureIds.remove(f.id);
+    }
+    storage.saveGroups(groups);
+    storage.saveEffects(effects);
     _patchChanged();
   }
+
+  Fixture? fixtureById(String id) {
+    for (final f in fixtures) {
+      if (f.id == id) return f;
+    }
+    return null;
+  }
+
+  List<Fixture> fixturesByIds(Iterable<String> ids) =>
+      [for (final id in ids) if (fixtureById(id) case final f?) f];
 
   void _patchChanged() {
     fixtures.sort((a, b) => a.universe != b.universe
         ? a.universe.compareTo(b.universe)
         : a.address.compareTo(b.address));
     _updateIntensityMask();
+    _refreshRunningEffects();
     storage.saveFixtures(fixtures);
     notifyListeners();
   }
@@ -482,5 +506,172 @@ class AppState extends ChangeNotifier {
     engine.applySettings(s);
     storage.saveNetwork(s);
     notifyListeners();
+  }
+
+  // ---------- Gruppen ----------
+
+  FixtureGroup saveGroup(String name, List<String> fixtureIds) {
+    final g = FixtureGroup(id: newId(), name: name, fixtureIds: [...fixtureIds]);
+    groups.add(g);
+    storage.saveGroups(groups);
+    notifyListeners();
+    return g;
+  }
+
+  void updateGroup(FixtureGroup g, {String? name, List<String>? fixtureIds}) {
+    if (name != null) g.name = name;
+    if (fixtureIds != null) {
+      g.fixtureIds
+        ..clear()
+        ..addAll(fixtureIds);
+    }
+    storage.saveGroups(groups);
+    notifyListeners();
+  }
+
+  void deleteGroup(FixtureGroup g) {
+    groups.remove(g);
+    storage.saveGroups(groups);
+    notifyListeners();
+  }
+
+  // ---------- Effekte ----------
+
+  List<EffectTarget> targetsFor(Iterable<Fixture> list) => [
+        for (final f in list)
+          if (profileOf(f) case final p?) EffectTarget.of(f, p),
+      ];
+
+  bool isEffectRunning(Effect e) => engine.isEffectRunning(e.id);
+
+  void saveEffect(Effect e) {
+    if (!effects.contains(e)) effects.add(e);
+    storage.saveEffects(effects);
+    if (engine.isEffectRunning(e.id)) {
+      engine.updateEffect(e, targetsFor(fixturesByIds(e.fixtureIds)));
+    }
+    notifyListeners();
+  }
+
+  void deleteEffect(Effect e) {
+    engine.stopEffect(e.id);
+    effects.remove(e);
+    storage.saveEffects(effects);
+    notifyListeners();
+  }
+
+  void toggleEffect(Effect e) {
+    if (engine.isEffectRunning(e.id)) {
+      engine.stopEffect(e.id);
+    } else {
+      engine.startEffect(e, targetsFor(fixturesByIds(e.fixtureIds)));
+    }
+    notifyListeners();
+  }
+
+  /// Vorschau eines noch nicht gespeicherten Effekts (Editor).
+  void previewEffect(Effect e) {
+    final t = targetsFor(fixturesByIds(e.fixtureIds));
+    if (engine.isEffectRunning(e.id)) {
+      engine.updateEffect(e, t);
+    } else {
+      engine.startEffect(e, t);
+    }
+  }
+
+  void _refreshRunningEffects() {
+    for (final e in effects) {
+      if (engine.isEffectRunning(e.id)) {
+        engine.updateEffect(e, targetsFor(fixturesByIds(e.fixtureIds)));
+      }
+    }
+  }
+
+  /// Lampen kurz blinken lassen.
+  void identify(Iterable<Fixture> list) => engine.identify(targetsFor(list));
+
+  // ---------- Eigene Geräteprofile ----------
+
+  bool profileInUse(FixtureProfile p) => fixtures.any((f) => f.profileId == p.id);
+
+  void saveProfile(FixtureProfile p) {
+    final i = customProfiles.indexWhere((x) => x.id == p.id);
+    if (i >= 0) {
+      customProfiles[i] = p;
+    } else {
+      customProfiles.add(p);
+    }
+    storage.saveProfiles(customProfiles);
+    _patchChanged();
+  }
+
+  void deleteProfile(FixtureProfile p) {
+    if (profileInUse(p)) return;
+    customProfiles.removeWhere((x) => x.id == p.id);
+    storage.saveProfiles(customProfiles);
+    notifyListeners();
+  }
+
+  // ---------- Sichern & Laden ----------
+
+  static const backupFormat = 'dmx-master-show';
+
+  /// Komplette Show als JSON (ohne Konto-Daten).
+  Map<String, dynamic> exportShow() => {
+        'format': backupFormat,
+        'version': 1,
+        'exportedAt': DateTime.now().toIso8601String(),
+        'network': network.toJson(),
+        'profiles': customProfiles.map((e) => e.toJson()).toList(),
+        'fixtures': fixtures.map((e) => e.toJson()).toList(),
+        'groups': groups.map((e) => e.toJson()).toList(),
+        'scenes': scenes.map((e) => e.toJson()).toList(),
+        'chases': chases.map((e) => e.toJson()).toList(),
+        'effects': effects.map((e) => e.toJson()).toList(),
+      };
+
+  /// Ersetzt die aktuelle Show. Wirft FormatException bei fremden Dateien.
+  void importShow(Map<String, dynamic> j, {bool includeNetwork = false}) {
+    if (j['format'] != backupFormat) {
+      throw const FormatException('Das ist keine DMX-Master-Sicherung.');
+    }
+    List<T> list<T>(String k, T Function(Map<String, dynamic>) f) =>
+        [for (final e in (j[k] as List? ?? const [])) f(e as Map<String, dynamic>)];
+    final p = list('profiles', FixtureProfile.fromJson);
+    final fx = list('fixtures', Fixture.fromJson);
+    final g = list('groups', FixtureGroup.fromJson);
+    final sc = list('scenes', Scene.fromJson);
+    final ch = list('chases', Chase.fromJson);
+    final ef = list('effects', Effect.fromJson);
+
+    engine.stopAllEffects();
+    engine.stopChase();
+    customProfiles
+      ..clear()
+      ..addAll(p);
+    fixtures
+      ..clear()
+      ..addAll(fx);
+    groups
+      ..clear()
+      ..addAll(g);
+    scenes
+      ..clear()
+      ..addAll(sc);
+    chases
+      ..clear()
+      ..addAll(ch);
+    effects
+      ..clear()
+      ..addAll(ef);
+    storage.saveProfiles(customProfiles);
+    storage.saveGroups(groups);
+    storage.saveScenes(scenes);
+    storage.saveChases(chases);
+    storage.saveEffects(effects);
+    if (includeNetwork && j['network'] is Map) {
+      updateNetwork(NetworkSettings.fromJson((j['network'] as Map).cast<String, dynamic>()));
+    }
+    _patchChanged();
   }
 }

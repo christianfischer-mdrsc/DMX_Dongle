@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../services/account_service.dart';
 import '../state/app_state.dart';
 import 'admin_screen.dart';
+import 'backup.dart';
 import 'app_scope.dart';
 import 'network_screen.dart';
+import 'profiles_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -124,14 +126,26 @@ class SettingsScreen extends StatelessWidget {
               const _Header('Show'),
               _Group(children: [
                 ListTile(
-                  leading: const Icon(Icons.lightbulb_outline),
-                  title: const Text('Lampen'),
-                  trailing: Text('${app.fixtures.length}'),
+                  leading: const Icon(Icons.category_outlined),
+                  title: const Text('Geräteprofile'),
+                  subtitle: Text(app.customProfiles.isEmpty
+                      ? 'Eigene Lampen anlegen'
+                      : '${app.customProfiles.length} eigene Profile'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => push(const ProfilesScreen()),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.auto_awesome_outlined),
-                  title: const Text('Szenen & Abläufe'),
-                  trailing: Text('${app.scenes.length} · ${app.chases.length}'),
+                  leading: const Icon(Icons.ios_share),
+                  title: const Text('Show sichern'),
+                  subtitle: Text('${app.fixtures.length} Lampen, ${app.scenes.length} Szenen, '
+                      '${app.chases.length} Abläufe, ${app.effects.length} Effekte als Datei teilen'),
+                  onTap: () => exportShowFile(context, app),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.file_open_outlined),
+                  title: const Text('Show laden'),
+                  subtitle: const Text('Aus einer Sicherungsdatei'),
+                  onTap: () => importShowFile(context, app),
                 ),
               ]),
               const _Header('Über'),
@@ -142,10 +156,13 @@ class SettingsScreen extends StatelessWidget {
                     title: const Text('Hilfe & Kontakt'),
                     subtitle: SelectableText(app.supportEmail),
                   ),
-                const ListTile(
-                  leading: Icon(Icons.info_outline),
-                  title: Text('DMX Control'),
-                  subtitle: Text('Version 0.4.0 · Art-Net 4'),
+                ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset('assets/logo.png', width: 40, height: 40),
+                  ),
+                  title: const Text('DMX Master'),
+                  subtitle: const Text('Version 0.5.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(
