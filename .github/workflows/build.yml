@@ -31,10 +31,7 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - name: APK bauen
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_KEY="$SUPABASE_KEY"
+        run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
         with:
