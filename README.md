@@ -132,6 +132,9 @@ update unlock_codes set active = false where code = 'ABCDEFGHJKMN';
 
 **Regeln:** Ein Konto löst denselben Code nur einmal ein. Besitzt es schon alle Pakete eines Codes, wird der Code nicht verbraucht. Nach 10 falschen Codes pro Stunde ist das Konto für eine Stunde gesperrt. Freischaltungen werden auf dem Handy zwischengespeichert und funktionieren offline (z. B. am Dongle-WLAN).
 
+**Admin-Bereich (App 0.4):** Einstellungen → *Admin-Bereich*, nur für Konten in `admins`. Übersicht & Hinweis an alle, Codes erzeugen/sperren, Nutzer & Pakete, Protokoll. Server: `supabase/migrations/20261024120000_admin.sql`, Tests: `supabase/tests/test_admin.sql`.
+Anleitungen: *DMX Control – Bedienungsanleitung* und *DMX Control – Supabase Admin-Handbuch* (claude.ai-Dokumente).
+
 **Neues Paket:** Zeile in `packs` anlegen, gleiche ID als `requires:` am Profil in der App und in `featurePacks` eintragen.
 
 ---
