@@ -30,7 +30,11 @@ jobs:
 
       - run: flutter pub get
       - run: flutter test
-      - run: flutter build apk --release
+      - name: APK bauen
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_KEY="$SUPABASE_KEY"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -56,3 +60,27 @@ jobs:
         with:
           name: firmware-esp32
           path: firmware/.pio/build/esp32dev/firmware.bin
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Schema einspielen (zweimal, prüft Wiederholbarkeit)
+        run: |
+          psql -v ON_ERROR_STOP=1 -q -f supabase/tests/local_stub.sql
+          psql -v ON_ERROR_STOP=1 -q -f supabase/migrations/20261024000000_licensing.sql
+          psql -v ON_ERROR_STOP=1 -q -f supabase/migrations/20261024000000_licensing.sql
+      - name: Datenbank-Tests
+        run: psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_licensing.sql

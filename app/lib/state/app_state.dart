@@ -33,26 +33,76 @@ class AppState extends ChangeNotifier {
 
   bool isUnlocked(FixtureProfile p) => p.requires == null || entitlements.contains(p.requires);
 
+  // Freischaltungen werden pro Konto auf dem Handy zwischengespeichert:
+  // Am Dongle-WLAN gibt es kein Internet, die Pro-Geräte müssen trotzdem gehen.
+  String _entKey(UserAccount u) => 'entitlements.${u.id}';
+
+  Set<String> _cachedEntitlements(UserAccount u) {
+    final raw = storage.loadString(_entKey(u));
+    return raw == null || raw.isEmpty ? {} : raw.split(',').toSet();
+  }
+
+  void _setEntitlements(UserAccount u, Set<String> e) {
+    entitlements = e;
+    storage.saveString(_entKey(u), e.join(','));
+  }
+
+  /// Startet ohne zu warten: erst Zwischenspeicher, dann Server im Hintergrund.
   Future<void> restoreAccount() async {
     user = await account.restoreSession();
-    entitlements = user == null ? {} : await account.fetchEntitlements(user!);
+    final u = user;
+    entitlements = u == null ? {} : _cachedEntitlements(u);
     notifyListeners();
+    if (u != null) refreshEntitlements();
   }
 
-  Future<void> signIn(String email, String password) async {
-    user = await account.signIn(email, password);
-    entitlements = await account.fetchEntitlements(user!);
-    notifyListeners();
+  /// Holt die Freischaltungen vom Server. Offline bleibt der letzte Stand.
+  Future<void> refreshEntitlements() async {
+    final u = user;
+    if (u == null) return;
+    try {
+      _setEntitlements(u, await account.fetchEntitlements(u));
+      notifyListeners();
+    } on AccountException {
+      // offline – Zwischenspeicher gilt weiter
+    }
   }
 
-  Future<void> register(String name, String email, String password) async {
-    user = await account.register(name, email, password);
-    entitlements = await account.fetchEntitlements(user!);
+  Future<void> _afterLogin(UserAccount u) async {
+    user = u;
+    entitlements = _cachedEntitlements(u);
     notifyListeners();
+    await refreshEntitlements();
   }
+
+  Future<void> signIn(String email, String password) async =>
+      _afterLogin(await account.signIn(email, password));
+
+  /// true = angemeldet, false = E-Mail muss erst bestätigt werden.
+  Future<bool> register(String name, String email, String password) async {
+    final u = await account.register(name, email, password);
+    if (u == null) return false;
+    await _afterLogin(u);
+    return true;
+  }
+
+  Future<void> verifyEmail(String email, String code) async =>
+      _afterLogin(await account.verifyEmail(email, code));
+
+  Future<void> resetPassword(String email, String code, String newPassword) async =>
+      _afterLogin(await account.resetPassword(email, code, newPassword));
 
   Future<void> signOut() async {
     await account.signOut();
+    user = null;
+    entitlements = {};
+    notifyListeners();
+  }
+
+  Future<void> deleteAccount() async {
+    final u = user;
+    await account.deleteAccount();
+    if (u != null) storage.saveString(_entKey(u), '');
     user = null;
     entitlements = {};
     notifyListeners();
@@ -63,7 +113,7 @@ class AppState extends ChangeNotifier {
     final u = user;
     if (u == null) throw const AccountException('Bitte zuerst anmelden.');
     final added = await account.redeemCode(u, code);
-    entitlements = {...entitlements, ...added};
+    _setEntitlements(u, {...entitlements, ...added});
     notifyListeners();
     return featurePacks.where((p) => added.contains(p.id)).toList();
   }

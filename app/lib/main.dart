@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/backend_config.dart';
 import 'core/dmx/dmx_engine.dart';
 import 'core/transport/dmx_transport.dart';
 import 'data/storage.dart';
 import 'services/account_service.dart';
+import 'services/supabase_account_backend.dart';
 import 'state/app_state.dart';
 import 'ui/app_scope.dart';
 import 'ui/home_screen.dart';
@@ -20,10 +23,22 @@ Future<void> main() async {
   const MethodChannel('dmx_control/network').setMethodCallHandler((call) async {
     if (call.method == 'networkChanged') await engine.transport.reopen();
   });
-  final app = AppState(storage, engine, DemoAccountBackend())..load();
+  final app = AppState(storage, engine, await _createAccountBackend())..load();
   await app.restoreAccount();
   await engine.start();
   runApp(DmxApp(app: app));
+}
+
+/// Echter Server, wenn konfiguriert – sonst Testmodus.
+Future<AccountBackend> _createAccountBackend() async {
+  if (!BackendConfig.enabled) return DemoAccountBackend();
+  try {
+    await Supabase.initialize(url: BackendConfig.supabaseUrl, anonKey: BackendConfig.supabaseKey);
+    return SupabaseAccountBackend(Supabase.instance.client);
+  } catch (e) {
+    debugPrint('Supabase-Start fehlgeschlagen: $e');
+    return DemoAccountBackend();
+  }
 }
 
 class DmxApp extends StatelessWidget {

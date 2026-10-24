@@ -123,14 +123,14 @@ class SettingsScreen extends StatelessWidget {
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('DMX Control'),
-                  subtitle: Text('Version 0.2.2 · Art-Net 4'),
+                  subtitle: Text('Version 0.3.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(
                     leading: Icon(Icons.science_outlined, color: s.tertiary),
                     title: const Text('Konto im Testmodus'),
-                    subtitle: const Text('Konten und Codes werden nur auf diesem Gerät gespeichert. '
-                        'Die Server-Anbindung folgt.'),
+                    subtitle: const Text('Kein Server eingetragen: Konten und Codes werden nur auf '
+                        'diesem Gerät gespeichert.'),
                   ),
               ]),
             ],
@@ -175,6 +175,8 @@ class _Group extends StatelessWidget {
 
 // ---------------- Anmelden / Registrieren ----------------
 
+enum _AuthStep { signIn, register, verify, forgot, reset }
+
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -183,99 +185,218 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInScreenState extends State<SignInScreen> {
-  bool _register = false;
+  _AuthStep _step = _AuthStep.signIn;
   bool _busy = false;
   bool _showPw = false;
   String? _error;
+  String? _info;
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _pw = TextEditingController();
+  final _code = TextEditingController();
 
-  Future<void> _submit() async {
-    final app = AppScope.of(context);
+  @override
+  void dispose() {
+    for (final c in [_name, _email, _pw, _code]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _go(_AuthStep s, {String? info}) => setState(() {
+        _step = s;
+        _error = null;
+        _info = info;
+        _code.clear();
+      });
+
+  Future<void> _run(Future<void> Function() action) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (_register) {
-        await app.register(_name.text, _email.text, _pw.text);
-      } else {
-        await app.signIn(_email.text, _pw.text);
-      }
-      if (mounted) Navigator.pop(context);
+      await action();
     } on AccountException catch (e) {
-      setState(() => _error = e.message);
+      if (!mounted) return;
+      if (e.kind == AccountError.emailNotConfirmed) {
+        _go(_AuthStep.verify, info: 'Deine E-Mail ist noch nicht bestätigt. Gib den Code aus der '
+            'Bestätigungs-E-Mail ein oder lass dir einen neuen schicken.');
+      } else {
+        setState(() => _error = e.message);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final app = AppScope.of(context);
+    final email = _email.text.trim();
+    switch (_step) {
+      case _AuthStep.signIn:
+        await _run(() async {
+          await app.signIn(email, _pw.text);
+          if (mounted) Navigator.pop(context);
+        });
+      case _AuthStep.register:
+        await _run(() async {
+          final done = await app.register(_name.text, email, _pw.text);
+          if (!mounted) return;
+          if (done) {
+            Navigator.pop(context);
+          } else {
+            _go(_AuthStep.verify, info: 'Wir haben dir einen Bestätigungscode an $email geschickt.');
+          }
+        });
+      case _AuthStep.verify:
+        await _run(() async {
+          await app.verifyEmail(email, _code.text);
+          if (mounted) Navigator.pop(context);
+        });
+      case _AuthStep.forgot:
+        await _run(() async {
+          await app.account.requestPasswordReset(email);
+          if (mounted) {
+            _go(_AuthStep.reset,
+                info: 'Falls es ein Konto zu $email gibt, kommt gleich eine E-Mail mit einem Code.');
+          }
+        });
+      case _AuthStep.reset:
+        await _run(() async {
+          await app.resetPassword(email, _code.text, _pw.text);
+          if (mounted) Navigator.pop(context);
+        });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = Theme.of(context).colorScheme;
+    final app = AppScope.of(context);
+    final (title, button, intro) = switch (_step) {
+      _AuthStep.signIn => ('Anmelden', 'Anmelden',
+          'Mit einem Konto kannst du zusätzliche Geräte freischalten. Deine Freischaltungen '
+              'hängen am Konto, nicht am Handy.'),
+      _AuthStep.register => ('Konto erstellen', 'Konto erstellen',
+          'Du bekommst danach eine E-Mail mit einem Code, um deine Adresse zu bestätigen.'),
+      _AuthStep.verify => ('E-Mail bestätigen', 'Bestätigen', ''),
+      _AuthStep.forgot => ('Passwort vergessen', 'Code anfordern',
+          'Wir schicken dir einen Code, mit dem du ein neues Passwort setzen kannst.'),
+      _AuthStep.reset => ('Neues Passwort', 'Passwort speichern', ''),
+    };
+    final showName = _step == _AuthStep.register;
+    final showEmail = true;
+    final emailLocked = _step == _AuthStep.verify || _step == _AuthStep.reset;
+    final showCode = _step == _AuthStep.verify || _step == _AuthStep.reset;
+    final showPw = _step == _AuthStep.signIn || _step == _AuthStep.register || _step == _AuthStep.reset;
+
     return Scaffold(
-      appBar: AppBar(title: Text(_register ? 'Konto erstellen' : 'Anmelden')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          Text(
-            'Mit einem Konto kannst du zusätzliche Geräte freischalten. '
-            'Deine Freischaltungen hängen am Konto, nicht am Handy.',
-            style: TextStyle(color: s.onSurfaceVariant),
-          ),
-          const SizedBox(height: 20),
-          if (_register) ...[
-            TextField(
-              controller: _name,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline)),
-            ),
-            const SizedBox(height: 12),
-          ],
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'E-Mail', prefixIcon: Icon(Icons.mail_outline)),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _pw,
-            obscureText: !_showPw,
-            autofillHints: const [AutofillHints.password],
-            onSubmitted: (_) => _submit(),
-            decoration: InputDecoration(
-              labelText: 'Passwort',
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(_showPw ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                onPressed: () => setState(() => _showPw = !_showPw),
+      appBar: AppBar(title: Text(title)),
+      body: AutofillGroup(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          children: [
+            if ((_info ?? intro).isNotEmpty) ...[
+              Text(_info ?? intro, style: TextStyle(color: s.onSurfaceVariant)),
+              const SizedBox(height: 20),
+            ],
+            if (showName) ...[
+              TextField(
+                controller: _name,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.name],
+                decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline)),
               ),
+              const SizedBox(height: 12),
+            ],
+            if (showEmail) ...[
+              TextField(
+                controller: _email,
+                readOnly: emailLocked,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'E-Mail', prefixIcon: Icon(Icons.mail_outline)),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (showCode) ...[
+              TextField(
+                controller: _code,
+                keyboardType: TextInputType.number,
+                autofillHints: const [AutofillHints.oneTimeCode],
+                textInputAction: showPw ? TextInputAction.next : TextInputAction.done,
+                onSubmitted: showPw ? null : (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Code aus der E-Mail',
+                  hintText: '123456',
+                  prefixIcon: Icon(Icons.pin_outlined),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (showPw)
+              TextField(
+                controller: _pw,
+                obscureText: !_showPw,
+                autofillHints: [
+                  _step == _AuthStep.signIn ? AutofillHints.password : AutofillHints.newPassword,
+                ],
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  labelText: _step == _AuthStep.reset ? 'Neues Passwort' : 'Passwort',
+                  helperText: _step == _AuthStep.signIn || app.account.isDemo ? null : 'Mindestens 8 Zeichen',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    tooltip: _showPw ? 'Passwort verbergen' : 'Passwort anzeigen',
+                    icon: Icon(_showPw ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    onPressed: () => setState(() => _showPw = !_showPw),
+                  ),
+                ),
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: TextStyle(color: s.error)),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _busy ? null : _submit,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              child: _busy
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+                  : Text(button),
             ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: s.error)),
+            const SizedBox(height: 8),
+            ...switch (_step) {
+              _AuthStep.signIn => [
+                  TextButton(
+                      onPressed: () => _go(_AuthStep.register), child: const Text('Neu hier? Konto erstellen')),
+                  if (app.account.supportsPasswordReset)
+                    TextButton(onPressed: () => _go(_AuthStep.forgot), child: const Text('Passwort vergessen?')),
+                ],
+              _AuthStep.register => [
+                  TextButton(
+                      onPressed: () => _go(_AuthStep.signIn), child: const Text('Schon ein Konto? Anmelden')),
+                ],
+              _AuthStep.verify => [
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() async {
+                              await app.account.resendConfirmation(_email.text.trim());
+                              if (mounted) setState(() => _info = 'Neuer Code ist unterwegs.');
+                            }),
+                    child: const Text('Code erneut senden'),
+                  ),
+                  TextButton(onPressed: () => _go(_AuthStep.signIn), child: const Text('Zurück zur Anmeldung')),
+                ],
+              _AuthStep.forgot || _AuthStep.reset => [
+                  TextButton(onPressed: () => _go(_AuthStep.signIn), child: const Text('Zurück zur Anmeldung')),
+                ],
+            },
           ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _busy ? null : _submit,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            child: _busy
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
-                : Text(_register ? 'Konto erstellen' : 'Anmelden'),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () => setState(() {
-              _register = !_register;
-              _error = null;
-            }),
-            child: Text(_register ? 'Schon ein Konto? Anmelden' : 'Neu hier? Konto erstellen'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -284,12 +405,46 @@ class _SignInScreenState extends State<SignInScreen> {
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
 
+  Future<void> _confirmDelete(BuildContext context, AppState app) async {
+    final s = Theme.of(context).colorScheme;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konto löschen?'),
+        content: const Text('Dein Konto und alle Freischaltungen werden endgültig gelöscht. '
+            'Eingelöste Codes lassen sich danach nicht erneut verwenden. Lampen, Szenen und '
+            'Abläufe auf diesem Handy bleiben erhalten.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: s.error, foregroundColor: s.onError),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Endgültig löschen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      await app.deleteAccount();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konto gelöscht')));
+        Navigator.pop(context);
+      }
+    } on AccountException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppListener(
       engine: false,
       builder: (context, app) {
         final u = app.user;
+        final s = Theme.of(context).colorScheme;
         return Scaffold(
           appBar: AppBar(title: const Text('Konto')),
           body: u == null
@@ -298,6 +453,17 @@ class AccountScreen extends StatelessWidget {
                   _Group(children: [
                     ListTile(leading: const Icon(Icons.person_outline), title: const Text('Name'), subtitle: Text(u.displayName)),
                     ListTile(leading: const Icon(Icons.mail_outline), title: const Text('E-Mail'), subtitle: Text(u.email)),
+                    ListTile(
+                      leading: const Icon(Icons.sync),
+                      title: const Text('Freischaltungen aktualisieren'),
+                      onTap: () async {
+                        await app.refreshEntitlements();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(const SnackBar(content: Text('Freischaltungen geprüft')));
+                        }
+                      },
+                    ),
                   ]),
                   const SizedBox(height: 24),
                   OutlinedButton.icon(
@@ -308,6 +474,12 @@ class AccountScreen extends StatelessWidget {
                       await app.signOut();
                       if (context.mounted) Navigator.pop(context);
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    icon: Icon(Icons.delete_forever_outlined, color: s.error),
+                    label: Text('Konto löschen', style: TextStyle(color: s.error)),
+                    onPressed: () => _confirmDelete(context, app),
                   ),
                 ]),
         );
