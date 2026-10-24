@@ -108,7 +108,10 @@ flutter run                             # Handy per USB anschließen
 ### Konto & Freischaltung (Supabase)
 Server: Supabase (Postgres + Login). Datenbank: `supabase/migrations/20261024000000_licensing.sql`, Tests: `supabase/tests/`.
 
-**Einrichten**
+**Aktiv:** Projekt „DMX Control“ (`dinpegcabjxywluvtizt`, Frankfurt). URL und Publishable key stehen in `app/lib/config/backend_config.dart`.
+Solange kein eigener Mailversand läuft, kommt die Bestätigung als Link (`EMAIL_CODES=false`). Nach SMTP-Einrichtung und `{{ .Token }}` in den Vorlagen: `EMAIL_CODES` auf true setzen → Codes und Passwort-Reset in der App.
+
+**Einrichten (neues Projekt)**
 1. supabase.com → neues Projekt, Region *Central EU (Frankfurt)*.
 2. SQL Editor → Inhalt der Migration einfügen → Run.
 3. Authentication → Emails → Vorlagen *Confirm signup* und *Reset password*: `{{ .Token }}` einfügen (die App arbeitet mit 6-stelligen Codes statt Links).
