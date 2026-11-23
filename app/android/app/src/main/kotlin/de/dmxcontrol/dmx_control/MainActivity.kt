@@ -18,9 +18,33 @@ class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private val main = Handler(Looper.getMainLooper())
 
+    // Zuletzt gesehenes WLAN und ob Dart gerade Internet braucht (Download)
+    private var wifi: Network? = null
+    private var internetMode = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dmx_control/network")
+        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dmx_control/network")
+        // Dart → Android: für Downloads die WLAN-Bindung kurz lösen. Ohne Bindung
+        // nimmt Android das Netz mit Internet (Heim-WLAN oder mobile Daten).
+        // Bestehende Sockets (Art-Net) bleiben an ihrem Netz.
+        ch.setMethodCallHandler { call, result ->
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            when (call.method) {
+                "useInternet" -> {
+                    internetMode = true
+                    cm.bindProcessToNetwork(null)
+                    result.success(null)
+                }
+                "useWifi" -> {
+                    internetMode = false
+                    wifi?.let { cm.bindProcessToNetwork(it) }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        channel = ch
     }
 
     // Dart legt daraufhin seinen UDP-Socket neu an: Sockets bleiben an dem Netz,
@@ -39,12 +63,15 @@ class MainActivity : FlutterActivity() {
             .build()
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                wifi = network
+                if (internetMode) return
                 val ok = cm.bindProcessToNetwork(network)
                 Log.i(TAG, "An WLAN gebunden: $network ($ok)")
                 notifyDart()
             }
 
             override fun onLost(network: Network) {
+                if (wifi == network) wifi = null
                 if (cm.boundNetworkForProcess == network) {
                     cm.bindProcessToNetwork(null)
                     Log.i(TAG, "WLAN weg, Bindung gelöst")

@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DMX-Dongle Platine</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Gleicher Stil wie schaltplan.html (Rev A): Doku-Spalte, Blätter als scrollbare Tafeln */
+  :root {
+    --bg: #f5f7f8;
+    --paper: #ffffff;
+    --fg: #17212b;
+    --muted: #5b6874;
+    --rule: #d9e0e5;
+    --wire: #1f6f8b;
+    --part: #17212b;
+    --net: #c2570c;
+    --net-bg: #fff3e8;
+    --warn-bg: #fff8e1;
+    --warn-fg: #6d4c00;
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1418; --paper: #161d23; --fg: #e4eaee; --muted: #93a1ad; --rule: #2a343c;
+      --wire: #5cb8d6; --part: #e4eaee; --net: #ff9a4d; --net-bg: #3a2414;
+      --warn-bg: #2e2610; --warn-fg: #f2d27a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1418; --paper: #161d23; --fg: #e4eaee; --muted: #93a1ad; --rule: #2a343c;
+    --wire: #5cb8d6; --part: #e4eaee; --net: #ff9a4d; --net-bg: #3a2414;
+    --warn-bg: #2e2610; --warn-fg: #f2d27a; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  }
+  .wrap {
+    max-width: 920px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+    display: grid; gap: 32px;
+  }
+  header { display: grid; gap: 8px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--net); }
+  h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 6vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: 20px; margin: 0; text-wrap: balance; }
+  h3 { font-family: var(--display); font-weight: 700; font-size: 16px; margin: 0; }
+  p { margin: 0; max-width: 68ch; }
+  .lead { color: var(--muted); }
+  section { display: grid; gap: 12px; min-width: 0; }
+  .sheet {
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 6px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .sheet svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  .sheet-head {
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    padding: 10px 14px; border-bottom: 1px solid var(--rule); min-width: 720px;
+  }
+  .hint { font-size: 13px; color: var(--muted); }
+  svg text { font-family: var(--mono); fill: var(--fg); }
+  svg .ref { font-weight: 600; font-size: 13px; }
+  svg .val { font-size: 12px; fill: var(--muted); }
+  svg .pin { font-size: 11px; }
+  svg .pnum { font-size: 9px; fill: var(--muted); }
+  svg .netl { font-size: 11px; font-weight: 600; fill: var(--net); }
+  svg .note { font-family: var(--body); font-size: 12px; fill: var(--muted); }
+
+  /* Blockschaltbild */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .blk { background: var(--paper); border: 1px solid var(--rule); border-left: 3px solid var(--wire); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; }
+  .blk b { font-family: var(--mono); font-size: 12px; color: var(--net); font-weight: 600; }
+  .blk span { font-size: 14px; }
+  .blk small { font-size: 12px; color: var(--muted); }
+
+  .warn {
+    background: var(--warn-bg); color: var(--warn-fg); border-radius: 6px;
+    padding: 12px 14px; display: grid; gap: 6px; font-size: 14px;
+  }
+  .warn strong { font-weight: 600; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  tr.group td { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--net); background: var(--net-bg); padding-block: 6px; }
+  td.ref, td.qty { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 72ch; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--net-bg); color: var(--net); padding: 1px 5px; border-radius: 3px; }
+  .pinmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+  .pinmap div { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; font-size: 14px; }
+  .pinmap b { font-family: var(--mono); color: var(--net); font-weight: 600; display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Hardware · Rev B · eigene Platine</div>
+    <h1>DMX-Dongle Platine</h1>
+    <p class="lead">Komplette Schaltung ohne DevKit: USB-C mit Schutz, optional 7–24 V von einer DC-Buchse, Buck-Wandler auf 3,3 V, USB-UART mit Auto-Reset zum Flashen, ESP32-WROOM-32E und zwei RS485-Ausgänge auf XLR. Die Pins passen 1:1 zur Firmware (<code>board_config.h</code>) und zum USB-Spiegel für den Simulator.</p>
+  </header>
+
+  <section>
+    <h2>Übersicht</h2>
+    <div class="flow">
+      <div class="blk"><b>Blatt 1</b><span>USB-C / DC-Buchse</span><small>Sicherung, TVS, Dioden-ODER → VIN</small></div>
+      <div class="blk"><b>Blatt 2</b><span>Buck 3,3 V</span><small>AP63203, 3,8–32 V ein, 2 A</small></div>
+      <div class="blk"><b>Blatt 3</b><span>USB-UART</span><small>CP2102N + Auto-Reset, Log &amp; Simulator</small></div>
+      <div class="blk"><b>Blatt 4</b><span>ESP32-WROOM-32E</span><small>Reset, Boot, Status-LED</small></div>
+      <div class="blk"><b>Blatt 5</b><span>2 × RS485 → XLR</span><small>SP3485, TVS, DMX A und B</small></div>
+    </div>
+    <p class="hint">Netze mit gleichem Namen (orange Fahnen) sind verbunden. Breite Blätter: seitlich wischen.</p>
+  </section>
+
+  <section>
+    <h2>Blatt 1 · Eingang und Schutz</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 1/5</span><span>J1 · J2 · F1 · D1–D3</span></div>
+      <svg id="s1" viewBox="0 0 760 400" role="img" aria-label="Schaltplan Eingang: USB-C, DC-Buchse, Sicherung und Schutzdioden"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Blatt 2 · 3,3-V-Regler</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 2/5</span><span>U1 · L1</span></div>
+      <svg id="s2" viewBox="0 0 860 330" role="img" aria-label="Schaltplan Buck-Wandler 3,3 Volt"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Blatt 3 · USB-UART und Auto-Reset</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 3/5</span><span>U2 · U3 · Q1 · Q2</span></div>
+      <svg id="s3" viewBox="0 0 820 420" role="img" aria-label="Schaltplan USB-UART CP2102N mit Auto-Reset"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Blatt 4 · ESP32</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 4/5</span><span>U4 · SW1 · SW2</span></div>
+      <svg id="s4" viewBox="0 0 820 400" role="img" aria-label="Schaltplan ESP32-WROOM-32E mit Reset, Boot und LED"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Blatt 5 · DMX-Ausgänge A und B</h2>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 5/5 · Port A</span><span>U5 · J3</span></div>
+      <svg id="sA" viewBox="0 0 760 290" role="img" aria-label="Schaltplan DMX-Ausgang A"></svg>
+    </div>
+    <div class="sheet">
+      <div class="sheet-head"><span>Blatt 5/5 · Port B</span><span>U6 · J4</span></div>
+      <svg id="sB" viewBox="0 0 760 290" role="img" aria-label="Schaltplan DMX-Ausgang B"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pinbelegung ESP32</h2>
+    <div class="pinmap">
+      <div><b>IO17 (Pin 28)</b>DMX A Daten → U5 DI</div>
+      <div><b>IO4 (Pin 26)</b>DMX A Senden → U5 DE + /RE</div>
+      <div><b>IO25 (Pin 10)</b>DMX B Daten → U6 DI</div>
+      <div><b>IO26 (Pin 11)</b>DMX B Senden → U6 DE + /RE</div>
+      <div><b>IO2 (Pin 24)</b>Status-LED, blinkt bei DMX</div>
+      <div><b>IO0 (Pin 25)</b>BOOT-Taste, 3 s = WLAN löschen</div>
+      <div><b>TXD0 / RXD0 (35 / 34)</b>CP2102N: Log, Flashen, USB-Spiegel 921600 Baud</div>
+      <div><b>EN (Pin 3)</b>RESET-Taste und Auto-Reset</div>
+      <div><b>IO12 (Pin 14)</b>frei lassen: Strap-Pin für die Flash-Spannung</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Stückliste</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ref</th><th>Anz.</th><th>Bauteil</th><th>Hinweis</th></tr></thead>
+        <tbody>
+          <tr class="group"><td colspan="4">Eingang</td></tr>
+          <tr><td class="ref">J1</td><td class="qty">1</td><td>USB-C-Buchse 16-polig, nur USB 2.0 (z. B. HRO TYPE-C-31-M-12, GCT USB4105)</td><td>Daten und Strom über eine Buchse: Flashen, Log, Simulator. A6 mit B6 und A7 mit B7 verbinden, sonst geht der Stecker nur in eine Richtung.</td></tr>
+          <tr><td class="ref">R1, R2</td><td class="qty">2</td><td>5,1 kΩ, 0603</td><td>CC1 / CC2 nach GND. Ohne sie liefern USB-C-Netzteile und viele Powerbanks keine 5 V.</td></tr>
+          <tr><td class="ref">F1</td><td class="qty">1</td><td>PTC-Sicherung 0,75 A Haltestrom, 1206 (z. B. Bourns MF-MSMF075)</td><td>Schützt Port und Kabel bei Kurzschluss.</td></tr>
+          <tr><td class="ref">D1</td><td class="qty">1</td><td>TVS SMF5.0A (SOD-123FL)</td><td>Überspannung auf V_USB.</td></tr>
+          <tr><td class="ref">D2, D3</td><td class="qty">2</td><td>Schottky SS34 (SMA), 3 A / 40 V</td><td>Dioden-ODER: USB und DC-Buchse dürfen gleichzeitig stecken, kein Rückstrom.</td></tr>
+          <tr><td class="ref">J2</td><td class="qty">1</td><td>DC-Buchse 5,5 / 2,1 mm (optional)</td><td>7–24 V, Plus innen. Kann ganz entfallen, dann reicht USB.</td></tr>
+          <tr class="group"><td colspan="4">3,3-V-Regler</td></tr>
+          <tr><td class="ref">U1</td><td class="qty">1</td><td>AP63203WU-7 (TSOT-23-6), Buck 3,3 V fest, 2 A</td><td>Eingang 3,8–32 V. Alternative: TPS62162 (nur bis 17 V) oder ein fertiges Modul mit gleicher Pinfolge.</td></tr>
+          <tr><td class="ref">C1</td><td class="qty">1</td><td>10 µF, 35 V, X7R, 1206</td><td>Eingang, direkt an VIN / GND von U1.</td></tr>
+          <tr><td class="ref">C2</td><td class="qty">1</td><td>100 nF, 50 V, 0603</td><td>Eingang, HF-Abblockung.</td></tr>
+          <tr><td class="ref">C3</td><td class="qty">1</td><td>100 nF, 0603</td><td>Bootstrap zwischen BST und SW.</td></tr>
+          <tr><td class="ref">L1</td><td class="qty">1</td><td>4,7 µH, ≥ 3 A Sättigung, geschirmt (z. B. 4×4 mm)</td><td>Wert nach Datenblatt AP63203 für 3,3 V prüfen.</td></tr>
+          <tr><td class="ref">C4</td><td class="qty">2</td><td>22 µF, 10 V, X5R, 0805</td><td>Ausgang. Fängt die WLAN-Sendespitzen des ESP32 ab.</td></tr>
+          <tr><td class="ref">R3, D4</td><td class="qty">1 + 1</td><td>1 kΩ + LED rot, 0603</td><td>Betriebsanzeige 3V3.</td></tr>
+          <tr class="group"><td colspan="4">USB-UART</td></tr>
+          <tr><td class="ref">U2</td><td class="qty">1</td><td>USBLC6-2SC6 (SOT-23-6)</td><td>ESD-Schutz für D+ / D−, nah an J1 platzieren.</td></tr>
+          <tr><td class="ref">U3</td><td class="qty">1</td><td>CP2102N-A02-GQFN28 (QFN-28, 5×5 mm), JLCPCB C964632</td><td>Pinkompatibel zum CP2102. Läuft eigenversorgt an 3V3: VDD und REGIN verbunden. Windows bringt den Treiber mit.</td></tr>
+          <tr><td class="ref">C5, C11</td><td class="qty">1 + 1</td><td>100 nF + 1 µF, 0603</td><td>An VDD / REGIN von U3.</td></tr>
+          <tr><td class="ref">R11, R12</td><td class="qty">1 + 1</td><td>22,1 kΩ + 47,5 kΩ, 0603</td><td>Teiler für VBUS-Erkennung: der Pin darf nicht über VDD liegen.</td></tr>
+          <tr><td class="ref">R13</td><td class="qty">1</td><td>10 kΩ, 0603</td><td>Pull-up an RSTb.</td></tr>
+          <tr><td class="ref">Q1, Q2</td><td class="qty">2</td><td>NPN MMBT3904 (SOT-23)</td><td>Auto-Reset: Flashen ohne Tasten drücken.</td></tr>
+          <tr><td class="ref">R4, R5</td><td class="qty">2</td><td>10 kΩ, 0603</td><td>Basiswiderstände Q1 / Q2.</td></tr>
+          <tr class="group"><td colspan="4">ESP32</td></tr>
+          <tr><td class="ref">U4</td><td class="qty">1</td><td>ESP32-WROOM-32E-N4 (4 MB Flash)</td><td>Kein WROVER: dort ist IO17 vom PSRAM belegt. Antenne über den Platinenrand, darunter kein Kupfer.</td></tr>
+          <tr><td class="ref">C6</td><td class="qty">1</td><td>22 µF, 10 V, 0805</td><td>Puffer direkt am 3V3-Pin des Moduls.</td></tr>
+          <tr><td class="ref">C7</td><td class="qty">1</td><td>100 nF, 0603</td><td>Direkt am 3V3-Pin des Moduls.</td></tr>
+          <tr><td class="ref">R6, C8</td><td class="qty">1 + 1</td><td>10 kΩ + 1 µF</td><td>EN-Verzögerung. Zu wenig C führt zu unsauberem Start.</td></tr>
+          <tr><td class="ref">R7</td><td class="qty">1</td><td>10 kΩ</td><td>Pull-up IO0.</td></tr>
+          <tr><td class="ref">SW1, SW2</td><td class="qty">2</td><td>Taster SMD 4×4 oder 6×6 mm</td><td>SW1 RESET (EN), SW2 BOOT (IO0).</td></tr>
+          <tr><td class="ref">R8, D5</td><td class="qty">1 + 1</td><td>1 kΩ + LED grün, 0603</td><td>DMX-Aktivität an IO2. Hält IO2 beim Start Low, das ist korrekt.</td></tr>
+          <tr class="group"><td colspan="4">DMX-Ausgänge (je Port)</td></tr>
+          <tr><td class="ref">U5, U6</td><td class="qty">2</td><td>SP3485EN oder MAX3485 (SOIC-8)</td><td>3,3-V-RS485-Treiber. Für große Anlagen isoliert: ADM2587E (dann ohne D6 / D7).</td></tr>
+          <tr><td class="ref">C9, C10</td><td class="qty">2</td><td>100 nF, 0603</td><td>Direkt an Pin 8.</td></tr>
+          <tr><td class="ref">R9, R10</td><td class="qty">2</td><td>10 kΩ, 0603</td><td>Pull-down an DE: Treiber bleibt beim Booten hochohmig, kein Datenmüll auf der Leitung.</td></tr>
+          <tr><td class="ref">D6, D7</td><td class="qty">2</td><td>SM712 (SOT-23)</td><td>TVS für A / B gegen Spannungsspitzen vom XLR.</td></tr>
+          <tr><td class="ref">J3, J4</td><td class="qty">2</td><td>XLR-Buchse 3-polig, Female, Print (z. B. Neutrik NC3FAH)</td><td>Pin 1 GND, Pin 2 Data−, Pin 3 Data+. Profi-Geräte: 5-polig parallel (NC5FAH, Pins 1–3 gleich).</td></tr>
+          <tr class="group"><td colspan="4">Sonstiges</td></tr>
+          <tr><td class="ref">–</td><td class="qty">1</td><td>120-Ω-Abschlussstecker (XLR male)</td><td>Gehört ans letzte Gerät der Kette, nicht auf die Platine.</td></tr>
+          <tr><td class="ref">–</td><td class="qty">1</td><td>Gehäuse, USB-C-Kabel</td><td>Kunststoff am Antennenende, sonst leidet das WLAN.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Worauf es ankommt</h2>
+    <div class="warn">
+      <strong>Stromversorgung ist der häufigste Fehler.</strong>
+      <span>Der ESP32 zieht beim WLAN-Senden kurz bis zu 500 mA. Ein schwacher Regler oder zu wenig Kapazität am Modul führt zu Abstürzen oder Flash-Fehlern beim Programmieren, wie beim aktuellen Prototyp. Deshalb ein Buck mit 2 A und 22 µF plus 100 nF direkt am Modul.</span>
+    </div>
+    <ul>
+      <li><b>Strombedarf:</b> ESP32 im Mittel 120–180 mA, Spitzen 500 mA; je RS485-Treiber etwa 1 mA plus Last am Bus (bei 32 Geräten rund 60 mA). Über 3,3 V gerechnet bleiben bei 2 A reichlich Reserven.</li>
+      <li><b>Strap-Pins:</b> IO0 (Boot), IO2 (LED gegen GND), IO5, IO12 und IO15 nicht extern hochziehen. Vor allem IO12 frei lassen, sonst startet der Flash mit 1,8 V.</li>
+      <li><b>USB-Spiegel:</b> TXD0 / RXD0 laufen über U3 auf 921600 Baud. Der CP2102N schafft bis 3 MBaud.</li>
+      <li><b>DE-Pull-down:</b> Hält die Treiber aus, bis die Firmware IO4 / IO26 auf High setzt. Die Firmware braucht dafür keine Änderung.</li>
+      <li><b>Layout:</b> Buck-Schleife (C1, U1, L1, C4) klein halten; ESP32-Antenne an den Rand, darunter und davor kein Kupfer; Masse der XLR-Buchsen sternförmig an GND.</li>
+      <li><b>Dioden-ODER:</b> Hinter D2 liegen etwa 4,6 V. Das reicht dem Buck (min. 3,8 V). An der DC-Buchse sind 7–24 V vorgesehen; bis 32 V verträgt U1.</li>
+      <li><b>Kein Abschluss am Dongle:</b> Er ist Sender am Anfang der Kette. 120 Ω gehören ans letzte Gerät.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  const W = 'var(--wire)', P = 'var(--part)', N = 'var(--net)', NB = 'var(--net-bg)', PAPER = 'var(--paper)';
+
+  const wire = (pts) => `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${W}" stroke-width="2" stroke-linejoin="round"/>`;
+  const dot = (x, y) => `<circle cx="${x}" cy="${y}" r="3.5" fill="${W}"/>`;
+  const line = (x1, y1, x2, y2, w) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${P}" stroke-width="${w || 2}"/>`;
+  const t = (x, y, s, cls, anchor) => `<text x="${x}" y="${y}" class="${cls}"${anchor ? ` text-anchor="${anchor}"` : ''}>${s}</text>`;
+
+  function gnd(x, y) {
+    return `<line x1="${x}" y1="${y}" x2="${x}" y2="${y + 10}" stroke="${W}" stroke-width="2"/>
+      ${line(x - 10, y + 10, x + 10, y + 10)}${line(x - 6, y + 14, x + 6, y + 14)}${line(x - 2, y + 18, x + 2, y + 18)}`;
+  }
+
+  // Versorgungssymbol: Balken mit Netzname, Anschluss nach unten bei (x, y)
+  function pwr(x, y, name) {
+    return `${wire([[x, y], [x, y - 10]])}${line(x - 10, y - 10, x + 10, y - 10)}${t(x, y - 16, name, 'netl', 'middle')}`;
+  }
+
+  // Netzfahne; dir = 'r' (Fahne zeigt nach rechts, Anschluss links) oder 'l'
+  function net(x, y, name, dir) {
+    const w = name.length * 7 + 16, h = 18;
+    const pts = dir === 'l'
+      ? [[x, y], [x - 8, y - h / 2], [x - w, y - h / 2], [x - w, y + h / 2], [x - 8, y + h / 2]]
+      : [[x, y], [x + 8, y - h / 2], [x + w, y - h / 2], [x + w, y + h / 2], [x + 8, y + h / 2]];
+    const tx = dir === 'l' ? x - w / 2 - 4 : x + w / 2 + 4;
+    return `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${NB}" stroke="${N}" stroke-width="1.5"/>${t(tx, y + 4, name, 'netl', 'middle')}`;
+  }
+
+  // left = Beschriftung links
+  function capV(x, y1, y2, ref, val, polar, left) {
+    const m = (y1 + y2) / 2;
+    const lx = left ? x - 18 : x + 18, a = left ? 'end' : null;
+    return `${wire([[x, y1], [x, m - 4]])}${wire([[x, m + 4], [x, y2]])}
+      ${line(x - 12, m - 4, x + 12, m - 4, 2.5)}${line(x - 12, m + 4, x + 12, m + 4, 2.5)}
+      ${polar ? t(x - 18, m - 6, '+', 'pnum', 'middle') : ''}
+      ${t(lx, m - 2, ref, 'ref', a)}${t(lx, m + 13, val, 'val', a)}`;
+  }
+
+  function resH(x1, x2, y, ref, val) {
+    const m = (x1 + x2) / 2;
+    return `${wire([[x1, y], [m - 20, y]])}${wire([[m + 20, y], [x2, y]])}
+      <rect x="${m - 20}" y="${y - 7}" width="40" height="14" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${t(m, y - 13, ref, 'ref', 'middle')}${t(m, y + 24, val, 'val', 'middle')}`;
+  }
+
+  // Senkrechter Widerstand; left = Beschriftung links
+  function resV(x, y1, y2, ref, val, left) {
+    const m = (y1 + y2) / 2;
+    const lx = left ? x - 12 : x + 12, a = left ? 'end' : null;
+    return `${wire([[x, y1], [x, m - 18]])}${wire([[x, m + 18], [x, y2]])}
+      <rect x="${x - 7}" y="${m - 18}" width="14" height="36" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${t(lx, m - 2, ref, 'ref', a)}${t(lx, m + 13, val, 'val', a)}`;
+  }
+
+  // Waagrechte Diode, Anode links; kind = 'schottky' | 'led'
+  function diodeH(x1, x2, y, ref, val, kind) {
+    const m = (x1 + x2) / 2;
+    let bar = line(m + 9, y - 9, m + 9, y + 9);
+    if (kind === 'schottky') bar += line(m + 9, y - 9, m + 14, y - 9) + line(m + 9, y + 9, m + 4, y + 9);
+    const below = kind === 'led';
+    return `${wire([[x1, y], [m - 9, y]])}${wire([[m + 9, y], [x2, y]])}
+      <polygon points="${m - 9},${y - 9} ${m - 9},${y + 9} ${m + 9},${y}" fill="${PAPER}" stroke="${P}" stroke-width="2"/>${bar}
+      ${below ? t(m, y + 26, ref, 'ref', 'middle') + t(m, y + 40, val, 'val', 'middle')
+              : t(m, y - 16, ref, 'ref', 'middle') + t(m, y + 26, val, 'val', 'middle')}`;
+  }
+
+  // Senkrechte TVS-Diode (Kathode oben)
+  function tvsV(x, y1, y2, ref, val) {
+    const m = (y1 + y2) / 2;
+    return `${wire([[x, y1], [x, m - 9]])}${wire([[x, m + 9], [x, y2]])}
+      <polygon points="${x - 9},${m + 9} ${x + 9},${m + 9} ${x},${m - 9}" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${line(x - 9, m - 9, x + 9, m - 9)}${line(x - 9, m - 9, x - 9, m - 4)}${line(x + 9, m - 9, x + 9, m - 14)}
+      ${t(x + 16, m - 2, ref, 'ref')}${t(x + 16, m + 13, val, 'val')}`;
+  }
+
+  function indH(x1, x2, y, ref, val) {
+    const m = (x1 + x2) / 2, r = 7;
+    let arcs = `M ${m - 4 * r} ${y}`;
+    for (let i = 0; i < 4; i++) arcs += ` a ${r} ${r} 0 0 1 ${2 * r} 0`;
+    return `${wire([[x1, y], [m - 4 * r, y]])}${wire([[m + 4 * r, y], [x2, y]])}
+      <path d="${arcs}" fill="none" stroke="${P}" stroke-width="2"/>
+      ${t(m, y - 14, ref, 'ref', 'middle')}${t(m, y + 22, val, 'val', 'middle')}`;
+  }
+
+  // Senkrechter Taster
+  function swV(x, y1, y2, ref, val) {
+    const m = (y1 + y2) / 2;
+    return `${wire([[x, y1], [x, m - 10]])}${wire([[x, m + 10], [x, y2]])}
+      <circle cx="${x}" cy="${m - 10}" r="2.5" fill="${P}"/><circle cx="${x}" cy="${m + 10}" r="2.5" fill="${P}"/>
+      ${line(x - 9, m - 12, x - 2, m + 10)}${line(x - 12, m - 2, x - 18, m - 2)}
+      ${t(x + 12, m - 2, ref, 'ref')}${t(x + 12, m + 13, val, 'val')}`;
+  }
+
+  // NPN: Basis links bei (x-20, y), Kollektor oben (x+10, y-25), Emitter unten (x+10, y+25)
+  function npn(x, y, ref, val) {
+    return `<circle cx="${x + 4}" cy="${y}" r="17" fill="${PAPER}" stroke="${P}" stroke-width="1.5"/>
+      ${wire([[x - 20, y], [x - 4, y]])}${line(x - 4, y - 10, x - 4, y + 10, 2.5)}
+      ${line(x - 4, y - 5, x + 10, y - 14)}${wire([[x + 10, y - 14], [x + 10, y - 25]])}
+      ${line(x - 4, y + 5, x + 10, y + 14)}${wire([[x + 10, y + 14], [x + 10, y + 25]])}
+      <polygon points="${x + 10},${y + 14} ${x + 2},${y + 13} ${x + 6},${y + 7}" fill="${P}"/>
+      ${t(x + 28, y - 2, ref, 'ref')}${t(x + 28, y + 13, val, 'val')}`;
+  }
+
+  // Bauteil-Box mit Pins: pins = [{side:'l'|'r', y, num, name}]
+  function chip(x, y, w, h, ref, val, pins) {
+    let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${PAPER}" stroke="${P}" stroke-width="2"/>
+      ${t(x + w / 2, y - 22, ref, 'ref', 'middle')}${t(x + w / 2, y - 8, val, 'val', 'middle')}`;
+    for (const p of pins) {
+      const xe = p.side === 'l' ? x - 20 : x + w + 20;
+      const xi = p.side === 'l' ? x : x + w;
+      s += line(xe, p.y, xi, p.y);
+      s += p.side === 'l'
+        ? t(x + 7, p.y + 4, p.name, 'pin') + (p.num ? t(x - 10, p.y - 4, p.num, 'pnum', 'middle') : '')
+        : t(x + w - 7, p.y + 4, p.name, 'pin', 'end') + (p.num ? t(x + w + 10, p.y - 4, p.num, 'pnum', 'middle') : '');
+    }
+    return s;
+  }
+
+  const put = (id, svg) => { document.getElementById(id).innerHTML = svg; };
+
+  // ---------- Blatt 1: Eingang ----------
+  let s1 = '';
+  s1 += chip(110, 60, 110, 200, 'J1', 'USB-C 2.0', [
+    { side: 'l', y: 100, num: 'A6+B6', name: 'D+' },
+    { side: 'l', y: 130, num: 'A7+B7', name: 'D−' },
+    { side: 'l', y: 225, num: '', name: 'SHLD' },
+    { side: 'r', y: 80, num: 'A4', name: 'VBUS' },
+    { side: 'r', y: 130, num: 'A5', name: 'CC1' },
+    { side: 'r', y: 160, num: 'B5', name: 'CC2' },
+    { side: 'r', y: 230, num: 'A1', name: 'GND' },
+  ]);
+  s1 += net(90, 100, 'USB_D+', 'l') + net(90, 130, 'USB_D−', 'l');
+  s1 += wire([[90, 225], [70, 225], [70, 240]]) + gnd(70, 240);
+  s1 += wire([[240, 130], [265, 130]]) + resV(265, 130, 220, 'R1', '5,1k') + gnd(265, 220);
+  s1 += wire([[240, 160], [330, 160]]) + resV(330, 160, 230, 'R2', '5,1k') + gnd(330, 230);
+  s1 += wire([[240, 230], [245, 230], [245, 250]]) + gnd(245, 250);
+  // VBUS → F1 → V_USB → D2 → VIN
+  s1 += resH(240, 330, 80, 'F1', 'PTC 0,75 A');
+  s1 += wire([[330, 80], [380, 80]]) + dot(350, 80) + dot(365, 80);
+  s1 += tvsV(350, 80, 150, 'D1', 'SMF5.0A') + gnd(350, 150);
+  s1 += wire([[365, 80], [365, 40], [380, 40]]) + net(380, 40, 'V_USB', 'r');
+  s1 += diodeH(380, 470, 80, 'D2', 'SS34', 'schottky');
+  s1 += wire([[470, 80], [560, 80]]) + dot(520, 80) + net(560, 80, 'VIN', 'r');
+  // DC-Buchse
+  s1 += chip(150, 300, 70, 60, 'J2', 'DC 7–24 V (optional)', [
+    { side: 'r', y: 315, num: '', name: '+' },
+    { side: 'r', y: 345, num: '', name: '−' },
+  ]);
+  s1 += diodeH(240, 470, 315, 'D3', 'SS34', 'schottky');
+  s1 += wire([[470, 315], [520, 315], [520, 80]]);
+  s1 += wire([[240, 345], [260, 345], [260, 355]]) + gnd(260, 355);
+  s1 += t(600, 300, 'Dioden-ODER: die höhere', 'note') + t(600, 316, 'Spannung versorgt VIN,', 'note') + t(600, 332, 'kein Rückstrom in USB', 'note');
+  put('s1', s1);
+
+  // ---------- Blatt 2: Buck 3,3 V ----------
+  let s2 = '';
+  s2 += net(120, 80, 'VIN', 'l') + wire([[120, 80], [360, 80]]);
+  s2 += dot(150, 80) + capV(150, 80, 150, 'C1', '10 µF 35 V', false, true) + gnd(150, 150);
+  s2 += dot(250, 80) + capV(250, 80, 150, 'C2', '100 nF') + gnd(250, 150);
+  s2 += chip(380, 50, 140, 170, 'U1', 'AP63203WU (3,3 V, 2 A)', [
+    { side: 'l', y: 80, num: '3', name: 'VIN' },
+    { side: 'l', y: 115, num: '2', name: 'EN' },
+    { side: 'l', y: 190, num: '4', name: 'GND' },
+    { side: 'r', y: 80, num: '6', name: 'BST' },
+    { side: 'r', y: 120, num: '5', name: 'SW' },
+    { side: 'r', y: 170, num: '1', name: 'FB' },
+  ]);
+  s2 += dot(335, 80) + wire([[335, 80], [335, 115], [360, 115]]) + t(335, 142, 'EN an VIN', 'note', 'middle');
+  s2 += wire([[360, 190], [345, 190], [345, 200]]) + gnd(345, 200);
+  s2 += wire([[540, 80], [580, 80]]) + capV(580, 80, 120, 'C3', '100 nF');
+  s2 += wire([[540, 120], [640, 120]]) + dot(580, 120);
+  s2 += indH(640, 720, 120, 'L1', '4,7 µH');
+  s2 += wire([[720, 120], [810, 120]]) + dot(720, 120) + dot(760, 120) + net(810, 120, '3V3', 'r');
+  s2 += wire([[540, 170], [720, 170], [720, 120]]) + t(630, 162, 'FB an VOUT', 'note', 'middle');
+  s2 += capV(760, 120, 200, 'C4', '2× 22 µF') + gnd(760, 200);
+  // Betriebs-LED
+  s2 += net(460, 280, '3V3', 'l') + resH(460, 560, 280, 'R3', '1 kΩ');
+  s2 += diodeH(560, 650, 280, 'D4', 'LED rot', 'led') + wire([[650, 280], [690, 280], [690, 290]]) + gnd(690, 290);
+  s2 += t(30, 300, 'Werte für L1 / C4 laut Datenblatt AP63203 prüfen.', 'note');
+  put('s2', s2);
+
+  // ---------- Blatt 3: USB-UART ----------
+  let s3 = '';
+  s3 += chip(100, 60, 110, 110, 'U2', 'USBLC6-2SC6', [
+    { side: 'l', y: 85, num: '1', name: 'I/O1' },
+    { side: 'l', y: 115, num: '3', name: 'I/O2' },
+    { side: 'l', y: 145, num: '5', name: 'VBUS' },
+    { side: 'r', y: 85, num: '6', name: 'I/O1' },
+    { side: 'r', y: 115, num: '4', name: 'I/O2' },
+    { side: 'r', y: 145, num: '2', name: 'GND' },
+  ]);
+  s3 += net(80, 85, 'USB_D+', 'l') + net(80, 115, 'USB_D−', 'l') + net(80, 145, 'V_USB', 'l');
+  s3 += wire([[230, 145], [250, 145], [250, 155]]) + gnd(250, 155);
+  s3 += wire([[230, 85], [330, 85]]) + wire([[230, 115], [330, 115]]);
+  s3 += chip(350, 50, 160, 250, 'U3', 'CP2102N-A02-GQFN28', [
+    { side: 'l', y: 85, num: '4', name: 'D+' },
+    { side: 'l', y: 115, num: '5', name: 'D−' },
+    { side: 'l', y: 165, num: '6', name: 'VDD' },
+    { side: 'l', y: 190, num: '7', name: 'REGIN' },
+    { side: 'l', y: 235, num: '8', name: 'VBUS' },
+    { side: 'l', y: 262, num: '9', name: 'RSTb' },
+    { side: 'l', y: 287, num: '3,29', name: 'GND' },
+    { side: 'r', y: 85, num: '26', name: 'TXD' },
+    { side: 'r', y: 115, num: '25', name: 'RXD' },
+    { side: 'r', y: 170, num: '28', name: 'DTR' },
+    { side: 'r', y: 205, num: '24', name: 'RTS' },
+  ]);
+  // Eigenversorgt aus 3V3: VDD und REGIN verbunden (Regler-Bypass)
+  s3 += pwr(310, 150, '3V3') + wire([[310, 150], [310, 165], [330, 165]]);
+  s3 += dot(310, 165) + wire([[310, 165], [310, 190], [330, 190]]);
+  s3 += wire([[310, 165], [290, 165]]) + capV(290, 165, 210, 'C5 C11', '100n + 1µ', false, true) + gnd(290, 210);
+  // VBUS-Erkennung über Teiler (Pin verträgt nur VDD)
+  s3 += net(110, 235, 'V_USB', 'l') + resH(110, 210, 235, 'R11', '22,1k');
+  s3 += wire([[210, 235], [330, 235]]) + dot(235, 235) + resV(235, 235, 295, 'R12', '47,5k', true) + gnd(235, 295);
+  // RSTb hochziehen
+  s3 += pwr(260, 262, '3V3') + resH(260, 330, 262, 'R13', '10k');
+  s3 += wire([[330, 287], [318, 287], [318, 297]]) + gnd(318, 297);
+  s3 += wire([[530, 85], [560, 85]]) + net(560, 85, 'ESP_RX', 'r');
+  s3 += wire([[530, 115], [560, 115]]) + net(560, 115, 'ESP_TX', 'r');
+  // Auto-Reset (wie ESP32-DevKitC)
+  s3 += wire([[530, 170], [560, 170]]) + dot(560, 170) + resH(560, 640, 170, 'R4', '10 kΩ');
+  s3 += wire([[640, 170], [650, 170], [650, 150], [660, 150]]);
+  s3 += npn(680, 150, 'Q1', 'MMBT3904');
+  s3 += wire([[690, 125], [690, 100]]) + net(690, 100, 'EN', 'r');
+  s3 += wire([[530, 205], [690, 205], [690, 175]]) + dot(600, 205);
+  s3 += wire([[600, 205], [600, 290]]) + resH(600, 660, 290, 'R5', '10 kΩ');
+  s3 += npn(680, 290, 'Q2', 'MMBT3904');
+  s3 += wire([[690, 265], [690, 245]]) + net(690, 245, 'IO0', 'r');
+  s3 += wire([[560, 170], [560, 340], [690, 340], [690, 315]]);
+  s3 += t(30, 375, 'DTR / RTS steuern EN und IO0: esptool flasht ohne Tastendruck.', 'note');
+  s3 += t(30, 393, 'Kreuzungen ohne Punkt sind nicht verbunden. Pinnummern U3 laut Datenblatt CP2102N (QFN-28).', 'note');
+  put('s3', s3);
+
+  // ---------- Blatt 4: ESP32 ----------
+  let s4 = '';
+  s4 += chip(320, 50, 180, 320, 'U4', 'ESP32-WROOM-32E-N4', [
+    { side: 'l', y: 80, num: '2', name: '3V3' },
+    { side: 'l', y: 200, num: '3', name: 'EN' },
+    { side: 'l', y: 290, num: '25', name: 'IO0' },
+    { side: 'l', y: 350, num: '', name: 'GND' },
+    { side: 'r', y: 80, num: '35', name: 'TXD0' },
+    { side: 'r', y: 110, num: '34', name: 'RXD0' },
+    { side: 'r', y: 150, num: '28', name: 'IO17' },
+    { side: 'r', y: 180, num: '26', name: 'IO4' },
+    { side: 'r', y: 215, num: '10', name: 'IO25' },
+    { side: 'r', y: 245, num: '11', name: 'IO26' },
+    { side: 'r', y: 290, num: '24', name: 'IO2' },
+    { side: 'r', y: 345, num: '14', name: 'IO12' },
+  ]);
+  // 3V3 + Abblockung
+  s4 += net(110, 80, '3V3', 'l') + wire([[110, 80], [300, 80]]);
+  s4 += dot(150, 80) + capV(150, 80, 150, 'C6', '22 µF') + gnd(150, 150);
+  s4 += dot(230, 80) + capV(230, 80, 150, 'C7', '100 nF') + gnd(230, 150);
+  // EN
+  s4 += net(110, 200, 'EN', 'l') + wire([[110, 200], [300, 200]]);
+  s4 += dot(170, 200) + pwr(170, 165, '3V3') + resV(170, 165, 200, 'R6', '10k', true);
+  s4 += dot(215, 200) + capV(215, 200, 250, 'C8', '1 µF') + gnd(215, 250);
+  s4 += dot(275, 200) + swV(275, 200, 250, 'SW1', 'RESET') + gnd(275, 250);
+  // IO0
+  s4 += net(110, 290, 'IO0', 'l') + wire([[110, 290], [300, 290]]);
+  s4 += dot(170, 290) + pwr(170, 255, '3V3') + resV(170, 255, 290, 'R7', '10k', true);
+  s4 += dot(240, 290) + swV(240, 290, 340, 'SW2', 'BOOT') + gnd(240, 340);
+  s4 += wire([[300, 350], [290, 350], [290, 362]]) + gnd(290, 362);
+  // rechts
+  s4 += wire([[520, 80], [540, 80]]) + net(540, 80, 'ESP_TX', 'r');
+  s4 += wire([[520, 110], [540, 110]]) + net(540, 110, 'ESP_RX', 'r');
+  s4 += wire([[520, 150], [540, 150]]) + net(540, 150, 'DMX_A_TX', 'r');
+  s4 += wire([[520, 180], [540, 180]]) + net(540, 180, 'DMX_A_DE', 'r');
+  s4 += wire([[520, 215], [540, 215]]) + net(540, 215, 'DMX_B_TX', 'r');
+  s4 += wire([[520, 245], [540, 245]]) + net(540, 245, 'DMX_B_DE', 'r');
+  s4 += resH(520, 610, 290, 'R8', '1 kΩ') + diodeH(610, 690, 290, 'D5', 'LED grün', 'led');
+  s4 += wire([[690, 290], [720, 290], [720, 300]]) + gnd(720, 300);
+  s4 += t(530, 349, 'nicht beschalten (Strap)', 'note');
+  s4 += t(560, 385, 'Antenne über den Platinenrand', 'note');
+  s4 += t(410, 388, 'GND: Pins 1, 15, 38, 39 (EPAD)', 'note', 'middle');
+  put('s4', s4);
+
+  // ---------- Blatt 5: DMX-Ports ----------
+  function port(u, d, c, r, j, tx, de) {
+    let s = '';
+    s += chip(220, 60, 150, 150, u, 'SP3485EN / MAX3485', [
+      { side: 'l', y: 90, num: '4', name: 'DI' },
+      { side: 'l', y: 120, num: '3', name: 'DE' },
+      { side: 'l', y: 150, num: '2', name: '/RE' },
+      { side: 'l', y: 185, num: '1', name: 'RO' },
+      { side: 'r', y: 80, num: '8', name: 'VCC' },
+      { side: 'r', y: 120, num: '6', name: 'A' },
+      { side: 'r', y: 155, num: '7', name: 'B' },
+      { side: 'r', y: 190, num: '5', name: 'GND' },
+    ]);
+    s += net(130, 90, tx, 'l') + wire([[130, 90], [200, 90]]);
+    s += net(130, 120, de, 'l') + wire([[130, 120], [200, 120]]);
+    s += wire([[170, 120], [170, 150], [200, 150]]) + dot(170, 120);
+    s += dot(145, 120) + resV(145, 120, 175, r, '10k', true) + gnd(145, 175);
+    s += t(196, 189, 'offen', 'note', 'end');
+    s += wire([[390, 80], [440, 80]]) + net(440, 80, '3V3', 'r');
+    s += wire([[390, 190], [410, 190], [410, 205]]) + gnd(410, 205);
+    s += wire([[390, 120], [620, 120]]) + wire([[390, 155], [620, 155]]);
+    s += t(560, 113, 'Data+', 'note', 'middle') + t(560, 148, 'Data−', 'note', 'middle');
+    s += dot(480, 120) + dot(510, 155);
+    s += wire([[480, 120], [480, 180]]) + wire([[510, 155], [510, 180]]);
+    s += `<rect x="468" y="180" width="54" height="30" rx="3" fill="${PAPER}" stroke="${P}" stroke-width="2"/>`;
+    s += t(495, 200, 'TVS', 'pnum', 'middle') + t(530, 200, d, 'ref') + t(530, 214, 'SM712', 'val');
+    s += wire([[495, 210], [495, 225]]) + gnd(495, 225);
+    s += `<rect x="620" y="95" width="90" height="125" rx="45" fill="${PAPER}" stroke="${P}" stroke-width="2"/>`;
+    s += t(665, 82, j, 'ref', 'middle') + t(665, 240, 'XLR 3-pol (5-pol)', 'val', 'middle');
+    s += `<circle cx="640" cy="120" r="5" fill="${P}"/><circle cx="640" cy="155" r="5" fill="${P}"/><circle cx="640" cy="190" r="5" fill="${P}"/>`;
+    s += t(654, 124, '3', 'pin') + t(654, 159, '2', 'pin') + t(654, 194, '1', 'pin');
+    s += t(672, 124, 'D+', 'pnum') + t(672, 159, 'D−', 'pnum') + t(672, 194, 'GND', 'pnum');
+    s += wire([[640, 190], [600, 190], [600, 205]]) + gnd(600, 205);
+    s += net(96, 255, '3V3', 'l') + wire([[96, 255], [110, 255]]);
+    s += wire([[110, 255], [136, 255]]) + line(136, 243, 136, 267, 2.5) + line(144, 243, 144, 267, 2.5) + wire([[144, 255], [240, 255], [240, 262]]) + gnd(240, 262);
+    s += t(140, 237, c, 'ref', 'middle') + t(175, 285, '100 nF an Pin 8', 'val', 'middle');
+    return s;
+  }
+  put('sA', port('U5', 'D6', 'C9', 'R9', 'J3', 'DMX_A_TX', 'DMX_A_DE'));
+  put('sB', port('U6', 'D7', 'C10', 'R10', 'J4', 'DMX_B_TX', 'DMX_B_DE'));
+})();
+</script>
+</body>
+</html>

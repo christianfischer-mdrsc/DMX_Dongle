@@ -1,7 +1,8 @@
-// main.cpp – ESP32-Glue: WLAN, UDP, Web-Setup, LED.
+// main.cpp – ESP32-Glue: WLAN, UDP, Web-Setup, Firmware-Update, LED.
 // Die eigentliche Art-Net/DMX-Logik steckt in lib/dmxcore (portabel).
 #include <Arduino.h>
 #include <Preferences.h>
+#include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -10,6 +11,7 @@
 #include "board_config.h"
 #include "dmx_node.h"
 #include "dmx_uart_esp32.h"
+#include "status_led.h"
 #include "usb_mirror.h"
 
 namespace {
@@ -30,7 +32,9 @@ Preferences gPrefs;
 uint8_t gRx[600];
 uint8_t gTx[artnet::kPollReplySize];
 bool gApMode = false;
-uint32_t gLedOffAt = 0;
+uint32_t gLastArtnetAt = 0;  // 0 = noch nie Art-Net gesehen
+String gOtaKey;
+String gOtaError;
 
 // Diagnose: empfangene UDP-Pakete pro Sekunde (Log im Simulator-Tab "Dongle")
 uint32_t gUdpCount = 0, gDmxCount = 0, gUdpStatAt = 0;
@@ -49,6 +53,7 @@ void loadConfig(dmx::NodeConfig& cfg, String& ssid, String& pass) {
     cfg.universe[i] = gPrefs.getUChar(key, i);
   }
   String name = gPrefs.getString("name", "");
+  gOtaKey = gPrefs.getString("otakey", OTA_DEFAULT_KEY);
   gPrefs.end();
   if (name.length()) {
     strlcpy(cfg.shortName, name.c_str(), sizeof(cfg.shortName));
@@ -65,6 +70,7 @@ void startWifi(const String& ssid, const String& pass) {
     WiFi.setHostname(gNode.config().shortName);
     WiFi.begin(ssid.c_str(), pass.c_str());
     Serial.printf("[WLAN] Verbinde mit '%s' ...\n", ssid.c_str());
+    statusled::setMode(statusled::Mode::WifiConnecting);
     uint32_t t0 = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t0 < STA_TIMEOUT_MS) delay(100);
     if (WiFi.status() == WL_CONNECTED) {
@@ -114,7 +120,14 @@ button{padding:10px 16px}</style></head><body>
 <label>Sub-Net (0-15)</label><input name=sub type=number min=0 max=15 value=%SUB%>
 <label>Universe Port A (0-15)</label><input name=u0 type=number min=0 max=15 value=%U0%>
 <label>Universe Port B (0-15)</label><input name=u1 type=number min=0 max=15 value=%U1%>
+<label>Update-Schl&uuml;ssel (leer = unver&auml;ndert, min. 8 Zeichen)</label><input name=otakey type=password minlength=8>
 <button>Speichern &amp; Neustart</button></form>
+<h3>Firmware-Update</h3>
+<form method=post enctype=multipart/form-data
+ onsubmit="this.action='/update?key='+encodeURIComponent(k.value);b.disabled=1;b.textContent='Wird geflasht ...'">
+<label>Datei (firmware.bin)</label><input name=f type=file accept=.bin required>
+<label>Update-Schl&uuml;ssel</label><input id=k type=password required>
+<button id=b>Flashen</button></form>
 <p>Firmware %FW% &middot; Frames: %FRAMES%</p></body></html>)HTML";
 
 void handleRoot() {
@@ -128,7 +141,7 @@ void handleRoot() {
   html.replace("%SUB%", String(c.subnet));
   html.replace("%U0%", String(c.universe[0]));
   html.replace("%U1%", String(c.universe[1]));
-  html.replace("%FW%", String(FW_VERSION >> 8) + "." + String(FW_VERSION & 0xFF));
+  html.replace("%FW%", FW_VERSION_STR);
   html.replace("%FRAMES%", String(gNode.framesReceived()));
   gWeb.send(200, "text/html", html);
 }
@@ -143,10 +156,87 @@ void handleSave() {
   gPrefs.putUChar("sub", constrain(gWeb.arg("sub").toInt(), 0, 15));
   gPrefs.putUChar("u0", constrain(gWeb.arg("u0").toInt(), 0, 15));
   gPrefs.putUChar("u1", constrain(gWeb.arg("u1").toInt(), 0, 15));
+  if (gWeb.arg("otakey").length() >= 8) gPrefs.putString("otakey", gWeb.arg("otakey"));
   gPrefs.end();
   gWeb.send(200, "text/html", "<p>Gespeichert, starte neu ...</p>");
   delay(500);
   ESP.restart();
+}
+
+// ---------- Info & Firmware-Update ----------
+
+// GET /api/info – für die App: Name, Firmware-Version, Netz
+void handleInfo() {
+  const auto& c = gNode.config();
+  String j = "{";
+  j += "\"name\":\"" + String(c.shortName) + "\",";
+  j += "\"fw\":\"" FW_VERSION_STR "\",";
+  j += "\"mode\":\"" + String(gApMode ? "ap" : "sta") + "\",";
+  j += "\"ip\":\"" + localIp().toString() + "\",";
+  j += "\"rssi\":" + String(gApMode ? 0 : WiFi.RSSI()) + ",";
+  j += "\"uptime\":" + String(millis() / 1000) + ",";
+  j += "\"frames\":" + String(gNode.framesReceived()) + ",";
+  j += "\"free\":" + String(ESP.getFreeSketchSpace()) + ",";
+  j += "\"ota\":true}";
+  gWeb.sendHeader("Access-Control-Allow-Origin", "*");
+  gWeb.send(200, "application/json", j);
+}
+
+// POST /update?key=...&md5=...  (multipart, Feldname beliebig)
+// Schreibt in die freie OTA-Partition. Erst ein erfolgreiches Update.end()
+// schaltet um; ein Abbruch lässt die laufende Firmware aktiv.
+void handleUpdateUpload() {
+  HTTPUpload& up = gWeb.upload();
+  switch (up.status) {
+    case UPLOAD_FILE_START:
+      gOtaError = "";
+      if (gWeb.arg("key") != gOtaKey) {
+        gOtaError = "key";
+        Serial.println("[OTA] falscher Schluessel");
+        return;
+      }
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+        gOtaError = Update.errorString();
+        return;
+      }
+      if (gWeb.arg("md5").length() == 32) Update.setMD5(gWeb.arg("md5").c_str());
+      statusled::setMode(statusled::Mode::Ota);
+      Serial.printf("[OTA] Start: %s\n", up.filename.c_str());
+      break;
+    case UPLOAD_FILE_WRITE:
+      if (gOtaError.length() || !Update.isRunning()) return;
+      if (Update.write(up.buf, up.currentSize) != up.currentSize) gOtaError = Update.errorString();
+      break;
+    case UPLOAD_FILE_END:
+      if (gOtaError.length() || !Update.isRunning()) break;
+      if (!Update.end(true)) gOtaError = Update.errorString();
+      else Serial.printf("[OTA] %u Bytes geschrieben\n", up.totalSize);
+      break;
+    case UPLOAD_FILE_ABORTED:
+      gOtaError = "Upload abgebrochen";
+      break;
+  }
+  if (gOtaError.length() && Update.isRunning()) Update.abort();
+}
+
+void handleUpdateDone() {
+  gWeb.sendHeader("Access-Control-Allow-Origin", "*");
+  if (gOtaError == "key") {
+    gWeb.send(401, "application/json", "{\"ok\":false,\"error\":\"Update-Schluessel falsch\"}");
+  } else if (gOtaError.length() || !Update.isFinished()) {
+    String e = gOtaError.length() ? gOtaError : String("keine Datei empfangen");
+    e.replace("\"", "'");
+    Serial.printf("[OTA] Fehler: %s\n", e.c_str());
+    statusled::error();
+    gWeb.send(500, "application/json", "{\"ok\":false,\"error\":\"" + e + "\"}");
+  } else {
+    gWeb.send(200, "application/json", "{\"ok\":true}");
+    Serial.println("[OTA] OK, Neustart");
+    delay(500);
+    ESP.restart();
+  }
+  gOtaError = "";
+  if (statusled::mode() == statusled::Mode::Ota) statusled::setMode(statusled::Mode::Ready);
 }
 
 // ---------- Art-Net ----------
@@ -171,15 +261,20 @@ void pollUdp() {
     if (n <= 0) continue;
     ++gUdpCount;
     gUdpLastFrom = gUdp.remoteIP();
-    switch (gNode.handlePacket(gRx, static_cast<size_t>(n))) {
+    const auto result = gNode.handlePacket(gRx, static_cast<size_t>(n));
+    if (result != dmx::PacketResult::Ignored) {
+      if (!gLastArtnetAt || millis() - gLastArtnetAt >= MASTER_TIMEOUT_MS)
+        Serial.printf("[ArtNet] Steuerung gefunden: %s\n", gUdp.remoteIP().toString().c_str());
+      gLastArtnetAt = millis() | 1;
+    }
+    switch (result) {
       case dmx::PacketResult::PollReceived:
         Serial.printf("[ArtNet] ArtPoll von %s -> Reply\n", gUdp.remoteIP().toString().c_str());
         sendPollReply(gUdp.remoteIP());
         break;
       case dmx::PacketResult::DmxApplied:
         ++gDmxCount;
-        digitalWrite(STATUS_LED, HIGH);
-        gLedOffAt = millis() + 30;
+        statusled::activity();
         break;
       default:
         break;
@@ -187,10 +282,27 @@ void pollUdp() {
   }
 }
 
+// LED-Modus aus dem aktuellen Zustand ableiten (Update und Taste haben Vorrang)
+void updateLedMode() {
+  using statusled::Mode;
+  const Mode m = statusled::mode();
+  if (m == Mode::Ota || m == Mode::Button) return;
+  Mode next;
+  if (gLastArtnetAt && millis() - gLastArtnetAt < MASTER_TIMEOUT_MS) {
+    next = Mode::Master;
+  } else if (gApMode) {
+    next = WiFi.softAPgetStationNum() > 0 ? Mode::Ready : Mode::ApWaiting;
+  } else {
+    next = WiFi.status() == WL_CONNECTED ? Mode::Ready : Mode::WifiConnecting;
+  }
+  if (next != m) statusled::setMode(next);
+}
+
 void checkResetButton() {
   static uint32_t pressedSince = 0;
   if (digitalRead(RESET_BTN) == LOW) {
     if (!pressedSince) pressedSince = millis();
+    if (millis() - pressedSince > 300) statusled::setMode(statusled::Mode::Button);
     if (millis() - pressedSince > 3000) {
       gPrefs.begin("dmx", false);
       gPrefs.remove("ssid");
@@ -200,6 +312,9 @@ void checkResetButton() {
       ESP.restart();
     }
   } else {
+    // Modus freigeben, updateLedMode() setzt den passenden
+    if (pressedSince && statusled::mode() == statusled::Mode::Button)
+      statusled::setMode(statusled::Mode::Ready);
     pressedSince = 0;
   }
 }
@@ -209,8 +324,9 @@ void checkResetButton() {
 void setup() {
   Serial.setTxBufferSize(4096);  // vor begin()!
   Serial.begin(USB_MIRROR_BAUD);
-  pinMode(STATUS_LED, OUTPUT);
+  statusled::begin(STATUS_LED);  // ab jetzt: Start-Flackern
   pinMode(RESET_BTN, INPUT_PULLUP);
+  Serial.printf("\n[DMX-Dongle] Firmware %s\n", FW_VERSION_STR);
 
   dmx::NodeConfig cfg;
   String ssid, pass;
@@ -225,6 +341,8 @@ void setup() {
 
   gWeb.on("/", HTTP_GET, handleRoot);
   gWeb.on("/save", HTTP_POST, handleSave);
+  gWeb.on("/api/info", HTTP_GET, handleInfo);
+  gWeb.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   gWeb.begin();
 
   Serial.printf("[DMX] Net %u Sub %u, Universen A=%u B=%u\n", cfg.net, cfg.subnet,
@@ -235,22 +353,20 @@ void setup() {
   char hello[96];
   snprintf(hello, sizeof hello, "%s · %s", cfg.shortName, localIp().toString().c_str());
   usbmirror::begin(hello);
+  updateLedMode();
 }
 
 void loop() {
   pollUdp();
   gWeb.handleClient();
   checkResetButton();
+  updateLedMode();
   if (millis() - gUdpStatAt >= 1000) {
     if (gUdpCount)
       Serial.printf("[ArtNet] %u UDP-Pakete/s (%u DMX), zuletzt von %s\n", gUdpCount, gDmxCount,
                     gUdpLastFrom.toString().c_str());
     gUdpCount = gDmxCount = 0;
     gUdpStatAt = millis();
-  }
-  if (gLedOffAt && millis() > gLedOffAt) {
-    digitalWrite(STATUS_LED, LOW);
-    gLedOffAt = 0;
   }
   delay(1);
 }

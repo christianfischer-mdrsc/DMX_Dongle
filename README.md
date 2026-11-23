@@ -44,6 +44,8 @@ app/
 
 Vollständiger Schaltplan mit Stückliste: `hardware/schaltplan.html` (im Browser öffnen). Versorgung über USB aus einer Powerbank.
 
+Eigene Platine ohne DevKit (Rev B: USB-C, Buck 3,3 V, CP2102N mit Auto-Reset, ESP32-WROOM-32E, 2 × RS485): `hardware/schaltplan_platine.html`.
+
 Pro DMX-Ausgang ein RS485-Transceiver (MAX485, SN75176 oder besser isoliert: ADM2587E).
 
 | ESP32 | MAX485 Port A | MAX485 Port B |
@@ -66,7 +68,7 @@ Voraussetzung: [PlatformIO](https://platformio.org) (VS Code-Extension oder CLI)
 ```bash
 cd firmware
 pio run -t upload        # bauen + flashen
-pio device monitor       # Log ansehen (115200)
+pio device monitor       # Log ansehen (921600)
 make -C test/host        # Kern-Tests auf dem PC
 ```
 
@@ -77,6 +79,29 @@ Im Browser `http://192.168.4.1` öffnen → Heim-WLAN, Name, Net/Sub-Net/Univers
 **Standard-Zuordnung:** Port A = Universe 0, Port B = Universe 1 (Net 0, Sub-Net 0) → passt zu App-Universe 1 und 2.
 
 Timing: Break 176 µs, MAB 12 µs, 512 Kanäle ≈ 43 Hz. Jeder Ausgang läuft in eigenem FreeRTOS-Task auf Core 1, WLAN auf Core 0. Bei ausbleibenden Daten hält der Dongle den letzten Zustand.
+
+**Status-LED (IO2)**
+
+| Muster | Bedeutung |
+|---|---|
+| schnelles Flackern | Start / Initialisierung |
+| gleichmäßig blinken (2 Hz) | verbindet mit dem Heim-WLAN |
+| kurzer Blitz alle 2 s | eigenes WLAN offen, niemand verbunden |
+| Doppelblitz alle 2 s | im WLAN bzw. Handy verbunden, wartet auf Steuerung |
+| dauerhaft an, kurz aus bei Daten | Steuerung gefunden (App/Pult), DMX läuft |
+| sehr schnelles Flackern | Firmware-Update läuft |
+| 3 lange Blinker | Fehler, z. B. Update fehlgeschlagen |
+| an, solange BOOT gedrückt | nach 3 s werden die WLAN-Daten gelöscht |
+
+Die Steuerung gilt als verloren, wenn 5 s kein Art-Net kommt.
+
+**Update über WLAN (ab Firmware 1.1.0)**
+- Die erste Version mit Update-Funktion muss einmal per USB drauf, danach geht alles über WLAN.
+- In der App: Einstellungen → Dongle-Firmware → *Auf Dongle installieren*. Das Handy lädt die Datei aus dem Internet (mobile Daten, falls es am Dongle-WLAN hängt) und schickt sie an den Dongle.
+- Ohne App: Setup-Seite `http://<dongle>/` → Abschnitt *Firmware-Update*, `firmware.bin` wählen.
+- Schutz: Update-Schlüssel, ab Werk `dmxdongle`, änderbar auf der Setup-Seite. Die Datei wird per MD5 geprüft; bricht die Übertragung ab, läuft die alte Firmware weiter (zwei App-Partitionen).
+- HTTP-Schnittstelle: `GET /api/info` (Name, Version, Netz), `POST /update?key=…&md5=…` (multipart).
+- Version steht in `firmware/include/board_config.h` (`FW_MAJOR`, `FW_MINOR`, `FW_PATCH`).
 
 ---
 
@@ -103,12 +128,22 @@ flutter run                             # Handy per USB anschließen
 - **Chaser:** Szenen als Schritte mit Fade- und Haltezeit, sortierbar, mit Schleife.
 - **Unten immer:** Grandmaster (wirkt auf Dimmer-Kanäle, bei Geräten ohne Dimmer auf die Farben) und Blackout.
 - **Netzwerk:** „Suchen“ schickt ArtPoll, gefundenen Dongle mit „Nutzen“ übernehmen. Anzeige der gesendeten Pakete/s.
-- **Einstellungen (Reiter „Mehr“):** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Freischaltungen per Code, Geräteprofile, Show sichern/laden.
+- **Einstellungen (Reiter „Mehr“):** Konto, Tag/Nacht/Auto, Dongle & Netzwerk, Dongle-Firmware, Freischaltungen per Code, Geräteprofile, Show sichern/laden.
 - **Live:** große Tasten für Effekte, Szenen, Abläufe; Tap-Tempo; Bildschirm bleibt an.
 - **Effekte** (`lib/core/dmx/effects.dart`): Regenbogen, Pulsieren, Lauflicht, Strobe, Flackern, Kreis – als Überlagerung vor Grandmaster/Blackout, im Takt oder frei. Tests: `test/effects_test.dart`.
 - **Gruppen, Lampe finden, eigene Profile, Show-Sicherung (JSON, `format: dmx-master-show`).**
 
 Logo-Quelle: `branding/logo.py` (erzeugt alle Icon-Größen), Vorschau `branding/dmx_master_icon_1024.png`. App-ID bleibt `de.dmxcontrol.dmx_control`, damit Updates über die alte Version installiert werden.
+
+### Firmware-Updates veröffentlichen (Admin)
+Datenbank: `supabase/migrations/20261123000000_firmware.sql` (Tabelle `firmware_releases`, Bucket `firmware`; Admins wie im Admin-Bereich über `public.admins`).
+
+1. Migration im SQL Editor ausführen (einmalig).
+2. Admin sein: wie beim Admin-Bereich (Eintrag in `public.admins`).
+3. In der App anmelden → Einstellungen → Dongle-Firmware → *Neue Version veröffentlichen*: `firmware.bin` wählen, Version (wie in `board_config.h`), Hinweise, Kanal *Stabil*/*Beta*.
+4. Alle Nutzer sehen veröffentlichte stabile Versionen und können sie installieren. Entwürfe und Beta sehen nur Admins.
+
+**App & Firmware als Download:** Tag pushen (`git tag v0.6.0 && git push origin v0.6.0`) → GitHub Actions baut APK und Firmware und legt ein GitHub-Release mit allen Dateien an (inkl. Bootloader/Partitionen fürs USB-Flashen).
 
 ### Konto & Freischaltung (Supabase)
 Server: Supabase (Postgres + Login). Datenbank: `supabase/migrations/20261024000000_licensing.sql`, Tests: `supabase/tests/`.

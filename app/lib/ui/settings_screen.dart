@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import 'admin_screen.dart';
 import 'backup.dart';
 import 'app_scope.dart';
+import 'firmware_screen.dart';
 import 'network_screen.dart';
 import 'profiles_screen.dart';
 
@@ -81,6 +82,13 @@ class SettingsScreen extends StatelessWidget {
                       : 'Sendet an ${app.network.nodeIp} · ${app.network.universeCount} Universen'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => push(const NetworkScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.system_update_alt_outlined),
+                  title: const Text('Dongle-Firmware'),
+                  subtitle: Text(app.isAdmin ? 'Updates installieren und veröffentlichen' : 'Updates installieren'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => push(const FirmwareScreen()),
                 ),
               ]),
               const _Header('Darstellung'),
@@ -162,7 +170,7 @@ class SettingsScreen extends StatelessWidget {
                     child: Image.asset('assets/logo.png', width: 40, height: 40),
                   ),
                   title: const Text('DMX Master'),
-                  subtitle: const Text('Version 0.5.0 · Art-Net 4'),
+                  subtitle: const Text('Version 0.6.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(

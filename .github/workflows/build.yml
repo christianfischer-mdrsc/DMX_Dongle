@@ -56,7 +56,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-esp32
-          path: firmware/.pio/build/esp32dev/firmware.bin
+          path: |
+            firmware/.pio/build/esp32dev/firmware.bin
+            firmware/.pio/build/esp32dev/bootloader.bin
+            firmware/.pio/build/esp32dev/partitions.bin
 
   database:
     runs-on: ubuntu-latest
@@ -84,3 +87,4 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_licensing.sql
           psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_admin.sql
+          psql -v ON_ERROR_STOP=1 -q -f supabase/tests/test_firmware.sql

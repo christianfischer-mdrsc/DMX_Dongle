@@ -1,12 +1,13 @@
 name: dmx_control
 description: DMX Master – Lichtsteuerung über Art-Net-Dongle.
 publish_to: 'none'
-version: 0.5.0+6
+version: 0.6.0+7
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
+  crypto: ^3.0.8
   flutter:
     sdk: flutter
   shared_preferences: ^2.2.3

@@ -7,6 +7,7 @@ import 'core/dmx/dmx_engine.dart';
 import 'core/transport/dmx_transport.dart';
 import 'data/storage.dart';
 import 'services/account_service.dart';
+import 'services/firmware_service.dart';
 import 'services/supabase_account_backend.dart';
 import 'state/app_state.dart';
 import 'ui/app_scope.dart';
@@ -23,7 +24,8 @@ Future<void> main() async {
   const MethodChannel('dmx_control/network').setMethodCallHandler((call) async {
     if (call.method == 'networkChanged') await engine.transport.reopen();
   });
-  final app = AppState(storage, engine, await _createAccountBackend())..load();
+  final account = await _createAccountBackend();
+  final app = AppState(storage, engine, account, firmwareRepositoryFor(account))..load();
   await app.restoreAccount();
   await engine.start();
   runApp(DmxApp(app: app));

@@ -7,15 +7,18 @@ import '../data/builtin_profiles.dart';
 import '../data/storage.dart';
 import '../models/models.dart';
 import '../services/account_service.dart';
+import '../services/firmware_service.dart';
 
 /// Show-Daten (Patch, Szenen, Chaser, Netzwerk), Einstellungen, Konto
 /// und das Bindeglied zur Engine.
 class AppState extends ChangeNotifier {
-  AppState(this.storage, this.engine, this.account);
+  AppState(this.storage, this.engine, this.account, [FirmwareRepository? firmware])
+      : firmware = firmware ?? NoFirmwareRepository();
 
   final Storage storage;
   final DmxEngine engine;
   final AccountBackend account;
+  final FirmwareRepository firmware;
 
   // ---------- Einstellungen ----------
 
@@ -31,6 +34,15 @@ class AppState extends ChangeNotifier {
 
   UserAccount? user;
   Set<String> entitlements = {};
+
+  // ---------- Firmware-Update ----------
+
+  /// Schlüssel für Updates am Dongle (Setup-Seite des Dongles).
+  String get otaKey => storage.loadString('otaKey') ?? 'dmxdongle';
+  set otaKey(String v) => storage.saveString('otaKey', v);
+
+  /// Adresse des Dongles für Info und Update.
+  String get dongleIp => network.nodeIp ?? '192.168.4.1';
 
   bool isUnlocked(FixtureProfile p) => p.requires == null || entitlements.contains(p.requires);
 
