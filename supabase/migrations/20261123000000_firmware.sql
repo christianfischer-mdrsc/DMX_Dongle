@@ -19,11 +19,12 @@
 create table if not exists public.firmware_releases (
   id           bigint generated always as identity primary key,
   version      text not null unique check (version ~ '^[0-9]+\.[0-9]+\.[0-9]+$'),
-  -- Zum Sortieren: 1.2.3 → 10203
+  -- Zum Sortieren: 1.2.3 → 10203. Wird vor dem CHECK berechnet, darf bei
+  -- ungültiger Version also nicht selbst abbrechen (dann greift der CHECK).
   version_code integer generated always as (
-    split_part(version, '.', 1)::integer * 10000
-    + split_part(version, '.', 2)::integer * 100
-    + split_part(version, '.', 3)::integer
+    coalesce(nullif(substring(split_part(version, '.', 1) from '^[0-9]{1,4}$'), '')::integer, 0) * 10000
+    + coalesce(nullif(substring(split_part(version, '.', 2) from '^[0-9]{1,2}$'), '')::integer, 0) * 100
+    + coalesce(nullif(substring(split_part(version, '.', 3) from '^[0-9]{1,2}$'), '')::integer, 0)
   ) stored,
   channel      text not null default 'stable' check (channel in ('stable', 'beta')),
   notes        text not null default '',
