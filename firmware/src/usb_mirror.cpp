@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "board_config.h"
+#include "usb_proto.h"
 
 #ifndef USB_MIRROR_ENABLED
 #define USB_MIRROR_ENABLED 1
@@ -20,8 +21,6 @@
 namespace usbmirror {
 namespace {
 
-constexpr uint8_t SYNC0 = 0xA5;
-constexpr uint8_t SYNC1 = 0x5A;
 constexpr uint8_t TYPE_DMX = 0x01;
 constexpr uint8_t TYPE_HELLO = 0x02;
 constexpr uint8_t TYPE_STATUS = 0x03;
@@ -47,34 +46,17 @@ PortState g_ports[USB_MIRROR_MAX_PORTS];
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 char g_hello[96] = "DMX-Dongle";
 uint8_t g_seq = 0;
-uint8_t g_tx[6 + MAX_PAYLOAD + 2];
+uint8_t g_tx[usbproto::kOverhead + usbproto::kMaxPayload];
+SemaphoreHandle_t g_txLock = nullptr;
 bool g_started = false;
 
-uint16_t crc16(uint16_t crc, const uint8_t* d, size_t n) {
-  while (n--) {
-    crc ^= static_cast<uint16_t>(*d++) << 8;
-    for (int i = 0; i < 8; ++i) {
-      crc = (crc & 0x8000) ? static_cast<uint16_t>((crc << 1) ^ 0x1021)
-                           : static_cast<uint16_t>(crc << 1);
-    }
-  }
-  return crc;
-}
-
-// Nur aus dem Spiegel-Task aufrufen (g_tx ist nicht geschuetzt).
+// Thread-sicher: Spiegel-Task und loop() (Antworten) senden beide.
 void sendPacket(uint8_t type, const uint8_t* payload, uint16_t len) {
-  if (len > MAX_PAYLOAD) return;
-  g_tx[0] = SYNC0;
-  g_tx[1] = SYNC1;
-  g_tx[2] = type;
-  g_tx[3] = g_seq++;
-  g_tx[4] = len & 0xFF;
-  g_tx[5] = len >> 8;
-  if (len) memcpy(g_tx + 6, payload, len);
-  const uint16_t c = crc16(0xFFFF, g_tx + 2, 4 + len);
-  g_tx[6 + len] = c & 0xFF;
-  g_tx[7 + len] = c >> 8;
-  Serial.write(g_tx, 8 + len);  // ein write() = Paket wird nicht von Logs zerteilt
+  if (!g_txLock) g_txLock = xSemaphoreCreateMutex();
+  xSemaphoreTake(g_txLock, portMAX_DELAY);
+  const size_t n = usbproto::build(type, g_seq++, payload, len, g_tx, sizeof(g_tx));
+  if (n) Serial.write(g_tx, n);  // ein write() = Paket wird nicht von Logs zerteilt
+  xSemaphoreGive(g_txLock);
 }
 
 void sendHello() {
@@ -164,7 +146,10 @@ void mirrorTask(void*) {
 
 }  // namespace
 
+void send(uint8_t type, const uint8_t* payload, uint16_t len) { sendPacket(type, payload, len); }
+
 void begin(const char* helloText) {
+  if (!g_txLock) g_txLock = xSemaphoreCreateMutex();
   if (helloText) setHello(helloText);
   if (g_started) return;
   g_started = true;
@@ -204,6 +189,7 @@ void onFrame(uint8_t port, const uint8_t* data, size_t len) {
 
 namespace usbmirror {
 void begin(const char*) {}
+void send(uint8_t, const uint8_t*, uint16_t) {}
 void setHello(const char*) {}
 void setPortAddress(uint8_t, uint16_t) {}
 void onFrame(uint8_t, const uint8_t*, size_t) {}

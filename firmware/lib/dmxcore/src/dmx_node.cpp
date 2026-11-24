@@ -38,24 +38,28 @@ PacketResult DmxNode::handlePacket(const uint8_t* buf, size_t len,
     case artnet::OpCode::Dmx: {
       artnet::DmxPacket pkt;
       if (!artnet::parseDmx(buf, len, pkt)) return PacketResult::Ignored;
-      bool applied = false;
-      for (uint8_t p = 0; p < numOutputs_; ++p) {
-        uint16_t addr = artnet::portAddress(cfg_.net, cfg_.subnet, cfg_.universe[p]);
-        if (addr != pkt.portAddress) continue;
-        const uint32_t now = clock_.millis();
-        mergers_[p].apply(sourceId, sourcePort, pkt.data, pkt.length, now);
-        outputs_[p]->write(mergers_[p].data(), kUniverseSize);
-        lastFrameMs_[p] = now;
-        everReceived_[p] = true;
-        applied = true;
-      }
-      if (applied) ++frames_;
-      return applied ? PacketResult::DmxApplied : PacketResult::DmxNotForUs;
+      return applyDmx(pkt.portAddress, pkt.data, pkt.length, sourceId, sourcePort);
     }
 
     default:
       return PacketResult::Ignored;
   }
+}
+
+PacketResult DmxNode::applyDmx(uint16_t portAddress, const uint8_t* data, uint16_t length,
+                               uint32_t sourceId, uint16_t sourcePort) {
+  bool applied = false;
+  for (uint8_t p = 0; p < numOutputs_; ++p) {
+    if (portAddressOf(p) != portAddress) continue;
+    const uint32_t now = clock_.millis();
+    mergers_[p].apply(sourceId, sourcePort, data, length, now);
+    outputs_[p]->write(mergers_[p].data(), kUniverseSize);
+    lastFrameMs_[p] = now;
+    everReceived_[p] = true;
+    applied = true;
+  }
+  if (applied) ++frames_;
+  return applied ? PacketResult::DmxApplied : PacketResult::DmxNotForUs;
 }
 
 bool DmxNode::portActive(uint8_t port, uint32_t timeoutMs) const {

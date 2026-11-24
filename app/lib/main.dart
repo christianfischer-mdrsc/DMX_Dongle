@@ -5,9 +5,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/backend_config.dart';
 import 'core/dmx/dmx_engine.dart';
 import 'core/transport/dmx_transport.dart';
+import 'core/transport/hybrid_transport.dart';
 import 'data/storage.dart';
 import 'services/account_service.dart';
 import 'services/firmware_service.dart';
+import 'services/usb_link.dart';
 import 'services/supabase_account_backend.dart';
 import 'state/app_state.dart';
 import 'ui/app_scope.dart';
@@ -18,16 +20,21 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = Storage();
   await storage.init();
-  final engine = DmxEngine(DmxTransport.create(), storage.loadNetwork());
+  // DMX über WLAN (Art-Net) oder – sobald ein Dongle per USB-C steckt – über USB
+  final usb = UsbLink();
+  final engine = DmxEngine(HybridTransport(DmxTransport.create(), usb), storage.loadNetwork());
   // Android meldet, wenn die App ans WLAN gebunden wurde (MainActivity.kt).
   // Sockets hängen am Netz von ihrer Erzeugung, also neu anlegen.
   const MethodChannel('dmx_control/network').setMethodCallHandler((call) async {
     if (call.method == 'networkChanged') await engine.transport.reopen();
   });
   final account = await _createAccountBackend();
-  final app = AppState(storage, engine, account, firmwareRepositoryFor(account))..load();
+  final app = AppState(storage, engine, account, firmwareRepositoryFor(account))
+    ..usb = usb
+    ..load();
   await app.restoreAccount();
   await engine.start();
+  await usb.start();
   runApp(DmxApp(app: app));
 }
 

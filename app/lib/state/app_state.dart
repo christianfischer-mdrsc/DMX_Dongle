@@ -8,6 +8,7 @@ import '../data/storage.dart';
 import '../models/models.dart';
 import '../services/account_service.dart';
 import '../services/firmware_service.dart';
+import '../services/usb_link.dart';
 
 /// Show-Daten (Patch, Szenen, Chaser, Netzwerk), Einstellungen, Konto
 /// und das Bindeglied zur Engine.
@@ -42,6 +43,9 @@ class AppState extends ChangeNotifier {
   set otaKey(String v) => storage.saveString('otaKey', v);
 
   /// Adresse des Dongles für Info und Update.
+  /// Dongle per USB-C (Android). null in Tests.
+  UsbLink? usb;
+
   String get dongleIp => network.nodeIp ?? '192.168.4.1';
 
   bool isUnlocked(FixtureProfile p) => p.requires == null || entitlements.contains(p.requires);

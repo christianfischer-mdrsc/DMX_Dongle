@@ -361,7 +361,8 @@ class DmxEngine extends ChangeNotifier {
   void _onEcho(ArtDmxIn e) {
     if (!syncEnabled) return;
     final target = transport.target;
-    if (target != null && target.isNotEmpty && e.from != target) return;
+    // Echo nur vom eigenen Dongle: per WLAN (Ziel-IP) oder per USB
+    if (e.from != 'usb' && target != null && target.isNotEmpty && e.from != target) return;
     final u = e.portAddress - portAddressFor(0);
     if (u < 0 || u >= _prog.length) return;
     applyRemote(u, e.data);

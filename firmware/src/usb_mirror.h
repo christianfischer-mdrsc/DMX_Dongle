@@ -28,6 +28,9 @@ void setHello(const char* helloText);
 // Art-Net Port-Address des Ausgangs (fuer die Anzeige im Simulator).
 void setPortAddress(uint8_t port, uint16_t portAddress);
 
+// Beliebiges Paket senden (Antworten auf USB-Befehle). Thread-sicher.
+void send(uint8_t type, const uint8_t* payload, uint16_t len);
+
 // Aus dem DMX-Ausgabe-Task nach jedem Frame aufrufen (nicht aus einer ISR).
 // data = Kanal 1..len, OHNE Startcode.
 void onFrame(uint8_t port, const uint8_t* data, size_t len);

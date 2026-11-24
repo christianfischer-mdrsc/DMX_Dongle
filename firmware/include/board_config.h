@@ -6,7 +6,7 @@
 // Firmware-Version. Die App vergleicht FW_VERSION_STR mit den veröffentlichten
 // Updates; FW_VERSION (Major.Minor) steht zusätzlich im ArtPollReply.
 #define FW_MAJOR 1
-#define FW_MINOR 3
+#define FW_MINOR 4
 #define FW_PATCH 0
 #define FW_VERSION ((FW_MAJOR << 8) | FW_MINOR)
 #define FW_STR2(x) #x
@@ -27,7 +27,7 @@
 #define DMX_B_DE    26
 
 #define STATUS_LED  2      // Status-LED, Blinkmuster siehe src/status_led.h
-#define RESET_BTN   0      // BOOT-Taste 3 s halten → WLAN-Daten löschen
+#define RESET_BTN   0      // BOOT-Taste 3 s halten → WLAN zurücksetzen (eigener AP)
 
 // Access-Point, wenn kein WLAN konfiguriert / erreichbar
 #define AP_PASSWORD "dmxdongle"   // min. 8 Zeichen

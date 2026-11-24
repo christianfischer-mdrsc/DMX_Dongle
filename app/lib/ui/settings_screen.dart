@@ -8,6 +8,7 @@ import 'app_scope.dart';
 import 'firmware_screen.dart';
 import 'network_screen.dart';
 import 'profiles_screen.dart';
+import 'usb_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -82,6 +83,15 @@ class SettingsScreen extends StatelessWidget {
                       : 'Sendet an ${app.network.nodeIp} · ${app.network.universeCount} Universen'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => push(const NetworkScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.usb),
+                  title: const Text('Dongle über USB'),
+                  subtitle: Text(app.usb?.isOpen == true
+                      ? 'Verbunden – DMX läuft über USB'
+                      : 'Per USB-C verbinden und einrichten (WLAN, Ausgänge, Passwörter)'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => push(const UsbScreen()),
                 ),
                 ListTile(
                   leading: const Icon(Icons.system_update_alt_outlined),

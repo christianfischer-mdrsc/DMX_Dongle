@@ -1,6 +1,9 @@
 package de.dmxcontrol.dmx_control
 
 import android.content.Context
+import android.content.Intent
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -21,6 +24,7 @@ class MainActivity : FlutterActivity() {
     // Zuletzt gesehenes WLAN und ob Dart gerade Internet braucht (Download)
     private var wifi: Network? = null
     private var internetMode = false
+    private var usbBridge: UsbSerialBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -45,6 +49,19 @@ class MainActivity : FlutterActivity() {
             }
         }
         channel = ch
+        usbBridge = UsbSerialBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+    }
+
+    // Dongle eingesteckt, während die App läuft (Intent-Filter im Manifest)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            @Suppress("DEPRECATION")
+            val dev: UsbDevice? =
+                if (android.os.Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                else intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            usbBridge?.attached(dev)
+        }
     }
 
     // Dart legt daraufhin seinen UDP-Socket neu an: Sockets bleiben an dem Netz,
@@ -84,6 +101,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        usbBridge?.dispose()
+        usbBridge = null
         callback?.let {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             cm.unregisterNetworkCallback(it)

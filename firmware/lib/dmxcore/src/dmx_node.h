@@ -39,6 +39,10 @@ class DmxNode {
   PacketResult handlePacket(const uint8_t* buf, size_t len, uint32_t sourceId = 0,
                             uint16_t sourcePort = artnet::kPort);
 
+  // DMX-Daten ohne Art-Net-Hülle (z.B. über USB). Gleiche Mischung wie oben.
+  PacketResult applyDmx(uint16_t portAddress, const uint8_t* data, uint16_t length,
+                        uint32_t sourceId, uint16_t sourcePort);
+
   // Echo: gemischten Stand an die Steuerungen zurückschicken.
   bool echoDue(uint8_t port, uint32_t minIntervalMs = 33, uint32_t keepAliveMs = 300);
   const uint8_t* mergedData(uint8_t port) const { return mergers_[port].data(); }

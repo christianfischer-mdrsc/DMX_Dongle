@@ -8,6 +8,9 @@
 #include "artnet.h"
 #include "dmx_node.h"
 #include "merger.h"
+#include "minijson.h"
+#include "usb_proto.h"
+#include <string>
 
 struct FakeClock : dmx::IClock {
   uint32_t now = 0;
@@ -210,6 +213,76 @@ static void testNodeEcho() {
   assert(node.mergedData(0)[0] == 255);
 }
 
+struct Got {
+  int count = 0;
+  uint8_t type = 0;
+  std::vector<uint8_t> payload;
+};
+
+static void onPacket(void* ctx, uint8_t type, const uint8_t* p, uint16_t len) {
+  auto* g = static_cast<Got*>(ctx);
+  ++g->count;
+  g->type = type;
+  g->payload.assign(p, p + len);
+}
+
+static void testUsbProto() {
+  // Testwert der CRC
+  const uint8_t check[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+  assert(usbproto::crc16(check, 9) == 0x29B1);
+
+  uint8_t payload[516] = {};
+  payload[0] = 0x01; payload[1] = 0x00;   // Port-Address 1
+  payload[2] = 0x00; payload[3] = 0x02;   // 512 Kanäle
+  payload[4] = 255; payload[515] = 7;
+  uint8_t pkt[600];
+  size_t n = usbproto::build(usbproto::kHostDmx, 3, payload, 516, pkt, sizeof(pkt));
+  assert(n == 516 + usbproto::kOverhead);
+
+  Got g;
+  usbproto::Parser parser(onPacket, &g);
+  const char log[] = "[WLAN] Log-Text dazwischen\n\xA5 kein Paket\n";
+  parser.feed(reinterpret_cast<const uint8_t*>(log), sizeof(log) - 1);
+  parser.feed(pkt, 10);                 // in Stücken, wie über USB
+  parser.feed(pkt + 10, n - 10);
+  assert(g.count == 1 && g.type == usbproto::kHostDmx && g.payload.size() == 516);
+  assert(g.payload[4] == 255 && g.payload[515] == 7);
+
+  pkt[20] ^= 1;                          // kaputtes Paket wird verworfen
+  parser.feed(pkt, n);
+  assert(g.count == 1 && parser.crcErrors() == 1);
+
+  // leeres Paket (Befehl ohne Nutzdaten)
+  n = usbproto::build(usbproto::kGetConfig, 0, nullptr, 0, pkt, sizeof(pkt));
+  parser.feed(pkt, n);
+  assert(g.count == 2 && g.type == usbproto::kGetConfig && g.payload.empty());
+
+  assert(usbproto::build(usbproto::kInfo, 0, payload, 516, pkt, 100) == 0);  // zu klein
+}
+
+static void testMiniJson() {
+  const std::string j =
+      "{ \"name\": \"B\\u00fchne \\\"1\\\"\", \"wifi\":\"off\", \"u0\": 3, \"en1\":false,"
+      " \"ports\":[{\"a\":1},{\"b\":\"}\"}], \"net\":-1, \"pass\":\"a,b}c\" }";
+  std::string s;
+  long n = 0;
+  bool b = true;
+  assert(minijson::getString(j, "name", s) && s == "B\xC3\xBChne \"1\"");
+  assert(minijson::getString(j, "wifi", s) && s == "off");
+  assert(minijson::getInt(j, "u0", n) && n == 3);
+  assert(minijson::getBool(j, "en1", b) && !b);
+  assert(minijson::getInt(j, "net", n) && n == -1);
+  assert(minijson::getString(j, "pass", s) && s == "a,b}c");   // nach verschachteltem Feld
+  assert(!minijson::getString(j, "fehlt", s));
+  assert(!minijson::getInt(j, "wifi", n));                      // falscher Typ
+
+  std::string out;
+  minijson::appendString(out, "a\"b\\c\n");
+  assert(out == "\"a\\\"b\\\\c\\n\"");
+  std::string obj = "{\"k\":" + out + "}";
+  assert(minijson::getString(obj, "k", s) && s == "a\"b\\c\n");  // Hin und zurück
+}
+
 int main() {
   testPortAddress();
   testDmxRoundTrip();
@@ -218,6 +291,8 @@ int main() {
   testMergeTwoControllers();
   testMergeSourcesAndEcho();
   testNodeEcho();
+  testUsbProto();
+  testMiniJson();
   std::puts("Alle Kern-Tests bestanden.");
   return 0;
 }

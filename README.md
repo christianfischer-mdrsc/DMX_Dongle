@@ -105,6 +105,25 @@ Die Steuerung gilt als verloren, wenn 5 s kein Art-Net kommt.
 
 ---
 
+### Dongle per USB-C am Handy (ab Firmware 1.4.0, App 0.7.0, nur Android)
+
+Der Dongle kann direkt per USB-C-Kabel am Handy hängen. Das Handy ist dabei USB-Host und versorgt ihn mit Strom. Die Platine hat die CC-Widerstände dafür.
+
+- **DMX geht über das Kabel statt über WLAN.** Das WLAN des Handys bleibt frei, die App hat weiter Internet (Konto, Updates).
+- **Einrichten in der App:** *Einstellungen → Verbindung → Dongle über USB*:
+  - Name des Dongles
+  - Ausgänge A und B einzeln an/aus, Universe je Ausgang, Art-Net Net/Sub-Net
+  - WLAN des Dongles: **Aus** (nur USB) · **Eigenes WLAN** (Name und Passwort frei wählbar) · **Heimnetz** (SSID mit „Netze suchen“, Passwort)
+  - Update-Schlüssel
+  - Hinweis mit „App anpassen“, wenn die App andere Universen sendet, als der Dongle ausgibt
+- Beim Einstecken bietet Android die App an. Danach ist der Zugriff ohne weitere Nachfrage erlaubt. Ist die App schon offen, verbindet sie sich von selbst.
+- **WLAN aus und kein Kabel zur Hand:** am Dongle die BOOT-Taste 3 s halten. Dann setzt er das WLAN zurück: eigenes WLAN `DMX-Dongle-XXXX`, Passwort `dmxdongle`.
+- USB und WLAN können gleichzeitig steuern (z. B. Handy per USB, PC-Simulator per WLAN). Es gilt der Live-Abgleich unten.
+- Unterstützte USB-Chips: CP210x (eigene Platine), CH340/CH341, CDC (ESP32-S3). Der Treiber steckt in der App (`UsbSerialBridge.kt`), es gibt keine Zusatzbibliothek.
+- iPhones erlauben keinen Zugriff auf USB-Seriell-Chips. Dort bleibt das WLAN.
+
+Protokoll (`firmware/lib/dmxcore/src/usb_proto.h`): dieselben Pakete wie der USB-Spiegel zum Simulator (`A5 5A | Typ | Seq | Länge | Daten | CRC16`). Neu sind DMX vom Host (`0x10`) und die Einstellungen als JSON (`0x20`–`0x27`).
+
 ### Mehrere Steuerungen gleichzeitig (Live-Abgleich, ab Firmware 1.3.0)
 
 Handy und PC (DMX-Simulator) können gleichzeitig steuern. Jede Steuerung sieht live, was die andere ändert.
