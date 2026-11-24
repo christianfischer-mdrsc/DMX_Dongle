@@ -26,14 +26,16 @@ class EffectTarget {
   bool get hasColor => red != null || green != null || blue != null;
   bool get hasPanTilt => pan != null && tilt != null;
 
+  /// Effekte wirken auf die Haupt-Lichtquelle (die mit Farbe, sonst die erste mit Dimmer).
   factory EffectTarget.of(Fixture f, FixtureProfile p) {
-    int? at(ChannelType t) {
-      final o = p.offsetOf(t);
+    final main = p.mainPart;
+    int? at(ChannelType t, {bool anyPart = false}) {
+      final o = p.offsetOf(t, part: anyPart ? null : main);
       return o == null ? null : f.address - 1 + o;
     }
 
     final d = at(ChannelType.dimmer);
-    final hasColor = p.hasColor;
+    final hasColor = p.partHasColor(main);
     return EffectTarget(
       universe: f.universe,
       dimmer: d,
@@ -41,8 +43,8 @@ class EffectTarget {
       green: at(ChannelType.green),
       blue: at(ChannelType.blue),
       white: at(ChannelType.white),
-      pan: at(ChannelType.pan),
-      tilt: at(ChannelType.tilt),
+      pan: at(ChannelType.pan, anyPart: true),
+      tilt: at(ChannelType.tilt, anyPart: true),
       single: (d == null && !hasColor && p.channels.isNotEmpty) ? f.address - 1 : null,
     );
   }

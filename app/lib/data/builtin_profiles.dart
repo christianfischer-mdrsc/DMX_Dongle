@@ -80,6 +80,29 @@ final builtinProfiles = <FixtureProfile>[
     ],
   ),
 
+  // Zwei Lichtquellen in einer Lampe: weißes Strobe-LED-Feld + RGB-Ambient
+  FixtureProfile(
+    id: 'varytec-sonicstrobe-7',
+    manufacturer: 'Varytec',
+    name: 'Colors SonicStrobe (7 Kanäle)',
+    builtIn: true,
+    channels: [
+      ChannelDef('Dimmer', ChannelType.dimmer, 0, 'Strobe'),
+      ChannelDef('Strobe', ChannelType.strobe, 0, 'Strobe', [
+        ChannelRange(0, 8, 'Aus'),
+        ChannelRange(9, 255, 'Strobe langsam → schnell'),
+      ]),
+      ChannelDef('Dimmer', ChannelType.dimmer, 0, 'Ambient'),
+      ChannelDef('Strobe', ChannelType.strobe, 0, 'Ambient', [
+        ChannelRange(0, 8, 'Aus'),
+        ChannelRange(9, 255, 'Strobe langsam → schnell'),
+      ]),
+      ChannelDef('Rot', ChannelType.red, 0, 'Ambient'),
+      ChannelDef('Grün', ChannelType.green, 0, 'Ambient'),
+      ChannelDef('Blau', ChannelType.blue, 0, 'Ambient'),
+    ],
+  ),
+
   // ---------- Pro-Paket (Freischaltung nötig) ----------
   FixtureProfile(
     id: 'pro-bar-8rgb',

@@ -314,19 +314,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Grandmaster wirkt auf Dimmer-Kanäle; Geräte ohne Dimmer über ihre Farben.
+  /// Grandmaster wirkt auf Dimmer-Kanäle; Lichtquellen ohne Dimmer über ihre Farben.
   void _updateIntensityMask() {
     final mask = <int, Set<int>>{};
     for (final f in fixtures) {
       final p = profileOf(f);
       if (p == null) continue;
       final set = mask.putIfAbsent(f.universe, () => <int>{});
-      final dim = p.offsetOf(ChannelType.dimmer);
-      if (dim != null) {
-        set.add(f.address - 1 + dim);
-      } else {
-        for (var c = 0; c < p.channels.length; c++) {
-          if (p.channels[c].type.isColor) set.add(f.address - 1 + c);
+      for (final part in p.parts) {
+        final dims = p.offsetsOf(ChannelType.dimmer, part: part);
+        if (dims.isNotEmpty) {
+          for (final d in dims) {
+            set.add(f.address - 1 + d);
+          }
+        } else {
+          for (var c = 0; c < p.channels.length; c++) {
+            if (p.channels[c].part == part && p.channels[c].type.isColor) set.add(f.address - 1 + c);
+          }
         }
       }
     }
@@ -348,19 +352,23 @@ class AppState extends ChangeNotifier {
 
   // ---------- Gerätesteuerung ----------
 
-  int? fixtureValue(Fixture f, ChannelType t) {
-    final off = profileOf(f)?.offsetOf(t);
+  /// Wert einer Funktion; mit [part] in dieser Lichtquelle, sonst der erste passende Kanal.
+  int? fixtureValue(Fixture f, ChannelType t, {String? part}) {
+    final off = profileOf(f)?.offsetOf(t, part: part);
     return off == null ? null : engine.getChannel(f.universe, f.address - 1 + off);
   }
 
-  void setFixtureValues(Iterable<Fixture> list, Map<ChannelType, int> values) {
+  /// Setzt Funktionen. Mit [part] nur in dieser Lichtquelle, sonst auf allen
+  /// Kanälen dieser Funktion (z. B. beide Dimmer einer Lampe mit zwei Lichtquellen).
+  void setFixtureValues(Iterable<Fixture> list, Map<ChannelType, int> values, {String? part}) {
     final out = <(int, int, int)>[];
     for (final f in list) {
       final p = profileOf(f);
       if (p == null) continue;
       values.forEach((t, v) {
-        final off = p.offsetOf(t);
-        if (off != null) out.add((f.universe, f.address - 1 + off, v));
+        for (final off in p.offsetsOf(t, part: part)) {
+          out.add((f.universe, f.address - 1 + off, v));
+        }
       });
     }
     engine.setMany(out);
@@ -374,48 +382,60 @@ class AppState extends ChangeNotifier {
     ]);
   }
 
-  /// Setzt RGB(W) auf Geräten mit Farbkanälen, Dimmer auf voll falls 0.
-  void setFixtureColor(Iterable<Fixture> list, int r, int g, int b) {
+  /// Setzt RGB(W) auf Lichtquellen mit Farbkanälen (mit [part] nur dort),
+  /// deren Dimmer auf voll, falls er auf 0 steht.
+  void setFixtureColor(Iterable<Fixture> list, int r, int g, int b, {String? part}) {
     for (final f in list) {
       final p = profileOf(f);
       if (p == null) continue;
-      final values = <ChannelType, int>{};
-      if (p.has(ChannelType.white)) {
-        // Weißanteil aus RGB herausrechnen → sattere Farben bei RGBW
-        final w = [r, g, b].reduce((a, c) => a < c ? a : c);
-        values[ChannelType.red] = r - w;
-        values[ChannelType.green] = g - w;
-        values[ChannelType.blue] = b - w;
-        values[ChannelType.white] = w;
-      } else {
-        values[ChannelType.red] = r;
-        values[ChannelType.green] = g;
-        values[ChannelType.blue] = b;
+      for (final pp in part != null ? [part] : p.parts) {
+        if (!p.partHasColor(pp)) continue;
+        final values = <ChannelType, int>{};
+        if (p.has(ChannelType.white, part: pp)) {
+          // Weißanteil aus RGB herausrechnen → sattere Farben bei RGBW
+          final w = [r, g, b].reduce((a, c) => a < c ? a : c);
+          values[ChannelType.red] = r - w;
+          values[ChannelType.green] = g - w;
+          values[ChannelType.blue] = b - w;
+          values[ChannelType.white] = w;
+        } else {
+          values[ChannelType.red] = r;
+          values[ChannelType.green] = g;
+          values[ChannelType.blue] = b;
+        }
+        if (p.has(ChannelType.dimmer, part: pp) && (fixtureValue(f, ChannelType.dimmer, part: pp) ?? 0) == 0) {
+          values[ChannelType.dimmer] = 255;
+        }
+        setFixtureValues([f], values, part: pp);
       }
-      if (p.has(ChannelType.dimmer) && (fixtureValue(f, ChannelType.dimmer) ?? 0) == 0) {
-        values[ChannelType.dimmer] = 255;
-      }
-      setFixtureValues([f], values);
     }
   }
 
   /// Aktuelle Lichtfarbe eines Geräts für Vorschauen (null = keine Farbkanäle).
-  Color? fixtureColor(Fixture f) {
+  Color? fixtureColor(Fixture f, {String? part}) {
     final p = profileOf(f);
-    if (p == null || !p.hasColor) return null;
-    int v(ChannelType t) => fixtureValue(f, t) ?? 0;
+    if (p == null) return null;
+    final pp = part ?? p.mainPart;
+    if (!p.partHasColor(pp)) return null;
+    int v(ChannelType t) => fixtureValue(f, t, part: pp) ?? 0;
     final w = v(ChannelType.white);
     int c(int x) => x + w > 255 ? 255 : x + w;
     return Color.fromARGB(255, c(v(ChannelType.red)), c(v(ChannelType.green)), c(v(ChannelType.blue)));
   }
 
-  /// Helligkeit 0..1 (Dimmer, sonst hellster Farbkanal).
+  /// Helligkeit 0..1 (hellster Dimmer, sonst hellster Farbkanal).
   double fixtureLevel(Fixture f) {
     final p = profileOf(f);
     if (p == null) return 0;
-    final dim = fixtureValue(f, ChannelType.dimmer);
-    if (dim != null) return dim / 255;
+    final dims = p.offsetsOf(ChannelType.dimmer);
     var m = 0;
+    if (dims.isNotEmpty) {
+      for (final d in dims) {
+        final x = engine.getChannel(f.universe, f.address - 1 + d);
+        if (x > m) m = x;
+      }
+      return m / 255;
+    }
     for (var i = 0; i < p.channels.length; i++) {
       if (p.channels[i].type.isColor || p.channels[i].type == ChannelType.generic) {
         final x = engine.getChannel(f.universe, f.address - 1 + i);
@@ -425,15 +445,18 @@ class AppState extends ChangeNotifier {
     return m / 255;
   }
 
-  /// Alle Geräte an: Dimmer voll, Geräte ohne Farbe/Dimmer-Wert auf Weiß.
+  /// Alle Geräte an: Dimmer voll, dunkle Farb-Lichtquellen auf Weiß.
   void allOn([Iterable<Fixture>? list]) {
     for (final f in list ?? fixtures) {
       final p = profileOf(f);
       if (p == null) continue;
       if (p.has(ChannelType.dimmer)) setFixtureValues([f], {ChannelType.dimmer: 255});
-      final col = fixtureColor(f);
-      if (p.hasColor && (col == null || (col.r == 0 && col.g == 0 && col.b == 0))) {
-        setFixtureColor([f], 255, 255, 255);
+      for (final pp in p.parts) {
+        if (!p.partHasColor(pp)) continue;
+        final col = fixtureColor(f, part: pp);
+        if (col == null || (col.r == 0 && col.g == 0 && col.b == 0)) {
+          setFixtureColor([f], 255, 255, 255, part: pp);
+        }
       }
       if (!p.hasColor && !p.has(ChannelType.dimmer)) setFixtureChannel([f], 0, 255);
     }

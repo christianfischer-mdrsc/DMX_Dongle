@@ -23,18 +23,58 @@ enum ChannelType {
   bool get isColor => const {red, green, blue, white, amber, uv}.contains(this);
 }
 
+/// Bedeutung eines Wertebereichs, z. B. „0–8 keine Funktion“, „9–255 Strobe“.
+class ChannelRange {
+  final int from;
+  final int to;
+  final String label;
+  const ChannelRange(this.from, this.to, this.label);
+
+  bool contains(int v) => v >= from && v <= to;
+
+  Map<String, dynamic> toJson() => {'from': from, 'to': to, 'label': label};
+  factory ChannelRange.fromJson(Map<String, dynamic> j) =>
+      ChannelRange(j['from'] as int, j['to'] as int, (j['label'] as String?) ?? '');
+}
+
 class ChannelDef {
   final String name;
   final ChannelType type;
   final int defaultValue;
-  const ChannelDef(this.name, this.type, [this.defaultValue = 0]);
 
-  Map<String, dynamic> toJson() =>
-      {'name': name, 'type': type.name, 'default': defaultValue};
+  /// Lichtquelle innerhalb der Lampe, z. B. „Strobe“ oder „Ambient“.
+  /// Leer = die Lampe hat nur eine Lichtquelle.
+  final String part;
+
+  /// Optional: was die Werte bewirken (aus der DMX-Tabelle der Anleitung).
+  final List<ChannelRange> ranges;
+
+  const ChannelDef(this.name, this.type, [this.defaultValue = 0, this.part = '', this.ranges = const []]);
+
+  /// Bezeichnung des Bereichs, in dem [v] liegt (null = keiner hinterlegt).
+  String? rangeLabel(int v) {
+    for (final r in ranges) {
+      if (r.contains(v)) return r.label;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'type': type.name,
+        'default': defaultValue,
+        if (part.isNotEmpty) 'part': part,
+        if (ranges.isNotEmpty) 'ranges': ranges.map((r) => r.toJson()).toList(),
+      };
   factory ChannelDef.fromJson(Map<String, dynamic> j) => ChannelDef(
         j['name'] as String,
-        ChannelType.values.byName(j['type'] as String),
+        ChannelType.values.asNameMap()[j['type']] ?? ChannelType.generic,
         (j['default'] as int?) ?? 0,
+        (j['part'] as String?)?.trim() ?? '',
+        [
+          for (final r in (j['ranges'] as List?) ?? const [])
+            ChannelRange.fromJson((r as Map).cast<String, dynamic>()),
+        ],
       );
 }
 
@@ -60,14 +100,44 @@ class FixtureProfile {
   int get footprint => channels.length;
   String get label => manufacturer.isEmpty ? name : '$manufacturer $name';
 
-  int? offsetOf(ChannelType t) {
-    final i = channels.indexWhere((c) => c.type == t);
+  /// Lichtquellen in Reihenfolge ihres ersten Kanals. Ohne Angabe genau eine: ''.
+  List<String> get parts {
+    final out = <String>[];
+    for (final c in channels) {
+      if (!out.contains(c.part)) out.add(c.part);
+    }
+    return out.isEmpty ? const [''] : out;
+  }
+
+  bool get hasParts => parts.length > 1 || parts.first.isNotEmpty;
+
+  /// Erster Kanal dieser Funktion – in der Lichtquelle [part], ohne Angabe in der ganzen Lampe.
+  int? offsetOf(ChannelType t, {String? part}) {
+    final i = channels.indexWhere((c) => c.type == t && (part == null || c.part == part));
     return i < 0 ? null : i;
   }
 
-  bool has(ChannelType t) => offsetOf(t) != null;
+  /// Alle Kanäle dieser Funktion (z. B. jeder Dimmer einer Lampe mit zwei Lichtquellen).
+  List<int> offsetsOf(ChannelType t, {String? part}) => [
+        for (var i = 0; i < channels.length; i++)
+          if (channels[i].type == t && (part == null || channels[i].part == part)) i,
+      ];
+
+  bool has(ChannelType t, {String? part}) => offsetOf(t, part: part) != null;
+  bool partHasColor(String part) => channels.any((c) => c.part == part && c.type.isColor);
   bool get hasColor => channels.any((c) => c.type.isColor);
   bool get hasPanTilt => has(ChannelType.pan) && has(ChannelType.tilt);
+
+  /// Lichtquelle, auf die Farbe und Effekte wirken: die mit Farbe, sonst die erste mit Dimmer.
+  String get mainPart {
+    for (final p in parts) {
+      if (partHasColor(p)) return p;
+    }
+    for (final p in parts) {
+      if (has(ChannelType.dimmer, part: p)) return p;
+    }
+    return parts.first;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,

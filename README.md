@@ -163,6 +163,7 @@ flutter run                             # Handy per USB anschließen
 - **Live:** große Tasten für Effekte, Szenen, Abläufe; Tap-Tempo; Bildschirm bleibt an.
 - **Effekte** (`lib/core/dmx/effects.dart`): Regenbogen, Pulsieren, Lauflicht, Strobe, Flackern, Kreis – als Überlagerung vor Grandmaster/Blackout, im Takt oder frei. Tests: `test/effects_test.dart`.
 - **Gruppen, Lampe finden, eigene Profile, Show-Sicherung (JSON, `format: dmx-master-show`).**
+- **Lampen mit mehreren Lichtquellen** (z. B. Varytec Colors SonicStrobe: Strobe-Feld + RGB-Ambient): Im Profil-Editor bekommt jeder Kanal eine *Lichtquelle*. Jede Lichtquelle hat eigene Regler für Dimmer, Farbe und Strobe, und mehrere Dimmer pro Lampe sind erlaubt. *Bereiche* hinterlegen die Wertebereiche aus der DMX-Tabelle (z. B. 0–8 „Aus“, 9–255 „Strobe“). Sie erscheinen als Tasten am Schieber. Farbe und Effekte wirken auf die Lichtquelle mit Farbe. Tests: `test/profile_parts_test.dart`.
 
 Logo-Quelle: `branding/logo.py` (erzeugt alle Icon-Größen), Vorschau `branding/dmx_master_icon_1024.png`. App-ID bleibt `de.dmxcontrol.dmx_control`, damit Updates über die alte Version installiert werden.
 

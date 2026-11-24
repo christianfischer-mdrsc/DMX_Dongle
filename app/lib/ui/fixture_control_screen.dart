@@ -20,6 +20,13 @@ class FixtureControlScreen extends StatelessWidget {
       final ref = app.profileOf(first);
       final sameProfile = profiles.every((p) => p.id == ref?.id);
       bool any(bool Function(FixtureProfile) t) => profiles.any(t);
+      // Lichtquellen aller gewählten Lampen (z. B. „Strobe“ und „Ambient“)
+      final parts = <String>[
+        for (final p in profiles)
+          for (final x in p.parts) x,
+      ].toSet().toList();
+      if (parts.isEmpty) parts.add('');
+      final multi = parts.length > 1 || parts.first.isNotEmpty;
 
       return Scaffold(
         appBar: AppBar(
@@ -66,15 +73,7 @@ class FixtureControlScreen extends StatelessWidget {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
-            if (any((p) => p.has(ChannelType.dimmer)))
-              _Section(
-                title: 'Dimmer',
-                child: _ValueSlider(
-                  value: app.fixtureValue(first, ChannelType.dimmer) ?? 0,
-                  onChanged: (v) => app.setFixtureValues(fixtures, {ChannelType.dimmer: v}),
-                ),
-              ),
-            if (any((p) => p.hasColor)) _ColorSection(app: app, fixtures: fixtures),
+            for (final part in parts) ..._partSections(app, fixtures, profiles, part, multi),
             if (any((p) => p.hasPanTilt))
               _Section(
                 title: 'Position',
@@ -87,39 +86,163 @@ class FixtureControlScreen extends StatelessWidget {
                   }),
                 ),
               ),
-            if (any((p) => p.has(ChannelType.strobe)))
-              _Section(
-                title: 'Strobe',
-                child: _ValueSlider(
-                  value: app.fixtureValue(first, ChannelType.strobe) ?? 0,
-                  onChanged: (v) => app.setFixtureValues(fixtures, {ChannelType.strobe: v}),
-                ),
-              ),
             if (sameProfile && ref != null)
               _Section(
                 title: 'Alle Kanäle',
                 collapsible: true,
                 child: Column(children: [
                   for (var i = 0; i < ref.channels.length; i++)
-                    Row(children: [
-                      SizedBox(
-                        width: 90,
-                        child: Text('${i + 1} ${ref.channels[i].name}',
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Expanded(
-                        child: _ValueSlider(
-                          value: app.engine.getChannel(first.universe, first.address - 1 + i),
-                          onChanged: (v) => app.setFixtureChannel(fixtures, i, v),
-                        ),
-                      ),
-                    ]),
+                    _ChannelRow(
+                      number: i + 1,
+                      def: ref.channels[i],
+                      value: app.engine.getChannel(first.universe, first.address - 1 + i),
+                      onChanged: (v) => app.setFixtureChannel(fixtures, i, v),
+                    ),
                 ]),
               ),
           ],
         ),
       );
     });
+  }
+}
+
+/// Bedienelemente einer Lichtquelle: Dimmer, Farbe, Strobe, Geschwindigkeit.
+/// Hat die Lampe mehrere Lichtquellen, bekommt jede eine eigene Karte.
+List<Widget> _partSections(
+    AppState app, List<Fixture> fixtures, List<FixtureProfile> profiles, String part, bool multi) {
+  final first = fixtures.first;
+  bool any(ChannelType t) => profiles.any((p) => p.has(t, part: part));
+  ChannelDef? defOf(ChannelType t) {
+    for (final p in profiles) {
+      final o = p.offsetOf(t, part: part);
+      if (o != null) return p.channels[o];
+    }
+    return null;
+  }
+
+  // Wert vom ersten Gerät, das diese Funktion in der Lichtquelle hat
+  int valueOf(ChannelType t) {
+    for (final f in fixtures) {
+      final v = app.fixtureValue(f, t, part: part);
+      if (v != null) return v;
+    }
+    return 0;
+  }
+
+  _LabeledSlider slider(String label, ChannelType t) => _LabeledSlider(
+        label: label,
+        def: defOf(t),
+        value: valueOf(t),
+        onChanged: (v) => app.setFixtureValues(fixtures, {t: v}, part: part),
+      );
+
+  final hasColor = profiles.any((p) => p.partHasColor(part));
+  final sliders = <_LabeledSlider>[
+    if (any(ChannelType.dimmer)) slider('Dimmer', ChannelType.dimmer),
+    if (any(ChannelType.strobe)) slider('Strobe', ChannelType.strobe),
+    if (any(ChannelType.speed)) slider('Geschwindigkeit', ChannelType.speed),
+  ];
+  if (sliders.isEmpty && !hasColor) return const [];
+  final color = hasColor ? _ColorControls(app: app, fixtures: fixtures, part: part, ref: first) : null;
+
+  if (multi) {
+    return [
+      _Section(
+        title: part.isEmpty ? 'Licht' : part,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (sliders.isNotEmpty && sliders.first.label == 'Dimmer') sliders.first,
+          if (color != null) color,
+          for (final w in sliders)
+            if (w.label != 'Dimmer') w,
+        ]),
+      ),
+    ];
+  }
+  // Eine Lichtquelle: wie gewohnt je Funktion eine Karte
+  return [
+    for (final w in sliders)
+      if (w.label == 'Dimmer') _Section(title: 'Dimmer', child: w.withoutLabel()),
+    if (color != null) _Section(title: 'Farbe', child: color),
+    for (final w in sliders)
+      if (w.label != 'Dimmer') _Section(title: w.label!, child: w.withoutLabel()),
+  ];
+}
+
+/// Schieber mit optionaler Überschrift und den Wertebereichen aus dem Profil.
+class _LabeledSlider extends StatelessWidget {
+  const _LabeledSlider({this.label, this.def, required this.value, required this.onChanged});
+  final String? label;
+  final ChannelDef? def;
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  _LabeledSlider withoutLabel() => _LabeledSlider(def: def, value: value, onChanged: onChanged);
+
+  @override
+  Widget build(BuildContext context) {
+    final ranges = def?.ranges ?? const <ChannelRange>[];
+    final s = Theme.of(context).colorScheme;
+    final current = def?.rangeLabel(value);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (label != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(label!, style: Theme.of(context).textTheme.labelLarge),
+        ),
+      _ValueSlider(value: value, onChanged: onChanged),
+      if (current != null && ranges.length < 2)
+        Text(current, style: TextStyle(color: s.onSurfaceVariant, fontSize: 12)),
+      if (ranges.length >= 2)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Wrap(spacing: 6, runSpacing: 4, children: [
+            for (final r in ranges)
+              ChoiceChip(
+                label: Text(r.label.isEmpty ? '${r.from}–${r.to}' : r.label),
+                selected: r.contains(value),
+                visualDensity: VisualDensity.compact,
+                // Tippen springt an den Anfang des Bereichs
+                onSelected: (_) {
+                  if (!r.contains(value)) onChanged(r.from);
+                },
+              ),
+          ]),
+        ),
+    ]);
+  }
+}
+
+/// Zeile in „Alle Kanäle“: Nummer, Name (mit Lichtquelle), Schieber, Bereich.
+class _ChannelRow extends StatelessWidget {
+  const _ChannelRow({required this.number, required this.def, required this.value, required this.onChanged});
+  final int number;
+  final ChannelDef def;
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = Theme.of(context).colorScheme;
+    final range = def.rangeLabel(value);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        SizedBox(
+          width: 110,
+          child: Text(
+            '$number ${def.part.isEmpty ? def.name : '${def.part} · ${def.name}'}',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+        ),
+        Expanded(child: _ValueSlider(value: value, onChanged: onChanged)),
+      ]),
+      if (range != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 110, bottom: 4),
+          child: Text(range, style: TextStyle(color: s.onSurfaceVariant, fontSize: 12)),
+        ),
+    ]);
   }
 }
 
@@ -177,10 +300,12 @@ class _ValueSlider extends StatelessWidget {
       ]);
 }
 
-class _ColorSection extends StatelessWidget {
-  const _ColorSection({required this.app, required this.fixtures});
+class _ColorControls extends StatelessWidget {
+  const _ColorControls({required this.app, required this.fixtures, required this.part, required this.ref});
   final AppState app;
   final List<Fixture> fixtures;
+  final String part;
+  final Fixture ref;
 
   static const _presets = <Color>[
     Color(0xFFFF0000), Color(0xFFFF8000), Color(0xFFFFFF00), Color(0xFF00FF00),
@@ -192,47 +317,37 @@ class _ColorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final f = fixtures.first;
-    int v(ChannelType t) => app.fixtureValue(f, t) ?? 0;
+    final f = fixtures.firstWhere((x) => app.profileOf(x)?.partHasColor(part) ?? false, orElse: () => ref);
+    int v(ChannelType t) => app.fixtureValue(f, t, part: part) ?? 0;
     final w = v(ChannelType.white);
     final r = (v(ChannelType.red) + w).clamp(0, 255).toInt();
     final g = (v(ChannelType.green) + w).clamp(0, 255).toInt();
     final b = (v(ChannelType.blue) + w).clamp(0, 255).toInt();
+    void set(int r, int g, int b) => app.setFixtureColor(fixtures, r, g, b, part: part);
 
-    return _Section(
-      title: 'Farbe',
-      child: Column(children: [
-        Container(
-          height: 36,
-          decoration: BoxDecoration(
-            color: Color.fromARGB(255, r, g, b),
-            borderRadius: BorderRadius.circular(8),
-          ),
+    return Column(children: [
+      const SizedBox(height: 6),
+      Container(
+        height: 36,
+        decoration: BoxDecoration(
+          color: Color.fromARGB(255, r, g, b),
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(height: 12),
-        Wrap(spacing: 10, runSpacing: 10, children: [
-          for (final c in _presets)
-            InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => app.setFixtureColor(fixtures, _c(c.r), _c(c.g), _c(c.b)),
-              child: CircleAvatar(radius: 18, backgroundColor: c),
-            ),
-        ]),
-        const SizedBox(height: 8),
-        _ValueSlider(
-            value: r,
-            color: Colors.red,
-            onChanged: (x) => app.setFixtureColor(fixtures, x, g, b)),
-        _ValueSlider(
-            value: g,
-            color: Colors.green,
-            onChanged: (x) => app.setFixtureColor(fixtures, r, x, b)),
-        _ValueSlider(
-            value: b,
-            color: Colors.blue,
-            onChanged: (x) => app.setFixtureColor(fixtures, r, g, x)),
+      ),
+      const SizedBox(height: 12),
+      Wrap(spacing: 10, runSpacing: 10, children: [
+        for (final c in _presets)
+          InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => set(_c(c.r), _c(c.g), _c(c.b)),
+            child: CircleAvatar(radius: 18, backgroundColor: c),
+          ),
       ]),
-    );
+      const SizedBox(height: 8),
+      _ValueSlider(value: r, color: Colors.red, onChanged: (x) => set(x, g, b)),
+      _ValueSlider(value: g, color: Colors.green, onChanged: (x) => set(r, x, b)),
+      _ValueSlider(value: b, color: Colors.blue, onChanged: (x) => set(r, g, x)),
+    ]);
   }
 }
 

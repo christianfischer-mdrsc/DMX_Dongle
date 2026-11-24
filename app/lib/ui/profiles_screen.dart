@@ -96,12 +96,39 @@ class ProfilesScreen extends StatelessWidget {
   }
 }
 
+class _Range {
+  _Range(int from, int to, String label)
+      : from = TextEditingController(text: '$from'),
+        to = TextEditingController(text: '$to'),
+        label = TextEditingController(text: label);
+  final TextEditingController from, to, label;
+
+  ChannelRange? get value {
+    final a = int.tryParse(from.text.trim()), b = int.tryParse(to.text.trim());
+    if (a == null || b == null) return null;
+    final lo = a.clamp(0, 255), hi = b.clamp(0, 255);
+    return ChannelRange(lo < hi ? lo : hi, lo < hi ? hi : lo, label.text.trim());
+  }
+
+  void dispose() {
+    from.dispose();
+    to.dispose();
+    label.dispose();
+  }
+}
+
 class _Ch {
-  _Ch(this.name, this.type, this.def) : key = UniqueKey();
+  _Ch(this.name, this.type, this.def, {this.part = '', List<ChannelRange> ranges = const []})
+      : key = UniqueKey(),
+        ranges = [for (final r in ranges) (r.from, r.to, r.label)];
   final Key key;
   final TextEditingController name;
   ChannelType type;
   int def;
+
+  /// Lichtquelle, z. B. „Strobe“ oder „Ambient“ ('' = keine eigene)
+  String part;
+  List<(int, int, String)> ranges;
 }
 
 class ProfileEditor extends StatefulWidget {
@@ -121,14 +148,143 @@ class _ProfileEditorState extends State<ProfileEditor> {
       text: widget.profile == null ? '' : '${widget.profile!.name}${widget.copy ? ' (Kopie)' : ''}');
   late final List<_Ch> _channels = [
     for (final c in widget.profile?.channels ?? const <ChannelDef>[])
-      _Ch(TextEditingController(text: c.name), c.type, c.defaultValue),
+      _Ch(TextEditingController(text: c.name), c.type, c.defaultValue, part: c.part, ranges: c.ranges),
   ];
   final List<_Ch> _removed = [];
   String? _error;
 
   bool get _isEdit => widget.profile != null && !widget.copy;
 
-  void _addChannel() => setState(() => _channels.add(_Ch(TextEditingController(text: 'Kanal ${_channels.length + 1}'), ChannelType.generic, 0)));
+  /// Alle bisher vergebenen Lichtquellen, in Reihenfolge.
+  List<String> get _parts => [
+        for (final c in _channels)
+          if (c.part.isNotEmpty) c.part,
+      ].toSet().toList();
+
+  void _addChannel() => setState(() => _channels.add(_Ch(
+        TextEditingController(text: 'Kanal ${_channels.length + 1}'),
+        ChannelType.generic,
+        0,
+        // Neue Kanäle gehören erst mal zur selben Lichtquelle wie der letzte
+        part: _channels.isEmpty ? '' : _channels.last.part,
+      )));
+
+  /// Gleiche Funktion zweimal in derselben Lichtquelle? (z. B. zwei Dimmer ohne Lichtquelle)
+  String? _clash(int i) {
+    final c = _channels[i];
+    if (c.type == ChannelType.generic) return null;
+    for (var j = 0; j < i; j++) {
+      final o = _channels[j];
+      if (o.type == c.type && o.part == c.part) {
+        return 'Wie Kanal ${j + 1}: Hat die Lampe zwei getrennte Lichter, '
+            'gib beiden Kanälen eine eigene Lichtquelle.';
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _askPartName({String initial = ''}) async {
+    final ctl = TextEditingController(text: initial);
+    final r = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lichtquelle'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Ein eigenständig steuerbares Licht in der Lampe, z. B. „Strobe“, „Ambient“, „Laser“ oder „Ring außen“.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Name'),
+            onSubmitted: (v) => Navigator.pop(context, v.trim()),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(context, ctl.text.trim()), child: const Text('OK')),
+        ],
+      ),
+    );
+    ctl.dispose();
+    return (r == null || r.isEmpty) ? null : r;
+  }
+
+  Future<void> _editRanges(_Ch c) async {
+    final rows = [for (final r in c.ranges) _Range(r.$1, r.$2, r.$3)];
+    final result = await showDialog<List<ChannelRange>>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setD) {
+        return AlertDialog(
+          title: Text('Wertebereiche: ${c.name.text}'),
+          scrollable: true,
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Aus der DMX-Tabelle der Anleitung, z. B. 0–8 „Aus“, 9–255 „Strobe langsam → schnell“. '
+                'Die App zeigt die Bereiche dann als Tasten am Schieber.'),
+            const SizedBox(height: 12),
+            for (final r in rows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  SizedBox(
+                    width: 52,
+                    child: TextField(
+                      controller: r.from,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(isDense: true, labelText: 'von'),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 52,
+                    child: TextField(
+                      controller: r.to,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(isDense: true, labelText: 'bis'),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: r.label,
+                      decoration: const InputDecoration(isDense: true, labelText: 'Bedeutung'),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Entfernen',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setD(() => rows.remove(r)),
+                  ),
+                ]),
+              ),
+            TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Bereich'),
+              onPressed: () => setD(() {
+                // schließt an den letzten Bereich an
+                final last = rows.isEmpty ? null : rows.last.value;
+                final from = last == null ? 0 : (last.to + 1).clamp(0, 255);
+                rows.add(_Range(from, 255, ''));
+              }),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, [
+                for (final r in rows)
+                  if (r.value case final v?) v,
+              ]..sort((a, b) => a.from.compareTo(b.from))),
+              child: const Text('Übernehmen'),
+            ),
+          ],
+        );
+      }),
+    );
+    for (final r in rows) {
+      r.dispose();
+    }
+    if (result != null) setState(() => c.ranges = [for (final r in result) (r.from, r.to, r.label)]);
+  }
 
   void _save() {
     final app = AppScope.of(context);
@@ -141,7 +297,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
       name: name,
       channels: [
         for (final c in _channels)
-          ChannelDef(c.name.text.trim().isEmpty ? channelTypeLabels[c.type]! : c.name.text.trim(), c.type, c.def),
+          ChannelDef(
+            c.name.text.trim().isEmpty ? channelTypeLabels[c.type]! : c.name.text.trim(),
+            c.type,
+            c.def,
+            c.part,
+            [for (final r in c.ranges) ChannelRange(r.$1, r.$2, r.$3)],
+          ),
       ],
     );
     if (_isEdit && app.profileInUse(widget.profile!) && p.footprint != widget.profile!.footprint) {
@@ -167,6 +329,31 @@ class _ProfileEditorState extends State<ProfileEditor> {
       c.name.dispose();
     }
     super.dispose();
+  }
+
+  Widget _partPicker(_Ch c) {
+    const none = '\u0000keine', add = '\u0000neu';
+    final parts = _parts;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('part-${c.key}-${c.part}-${parts.length}'),
+      initialValue: c.part.isEmpty ? none : c.part,
+      isDense: true,
+      isExpanded: true,
+      decoration: const InputDecoration(isDense: true, labelText: 'Lichtquelle'),
+      items: [
+        const DropdownMenuItem(value: none, child: Text('– (ganze Lampe)')),
+        for (final p in parts) DropdownMenuItem(value: p, child: Text(p, overflow: TextOverflow.ellipsis)),
+        const DropdownMenuItem(value: add, child: Text('Neue Lichtquelle …')),
+      ],
+      onChanged: (v) async {
+        if (v == add) {
+          final n = await _askPartName();
+          setState(() => c.part = n ?? c.part);
+        } else {
+          setState(() => c.part = v == none || v == null ? '' : v);
+        }
+      },
+    );
   }
 
   @override
@@ -200,7 +387,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Column(children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             TextField(controller: _manufacturer, decoration: const InputDecoration(labelText: 'Hersteller (optional)')),
             const SizedBox(height: 12),
             TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name, z. B. „PAR 64 7-Kanal“')),
@@ -208,7 +395,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
               const SizedBox(height: 8),
               Text(_error!, style: TextStyle(color: s.error)),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            Text(
+              'Hat die Lampe mehrere getrennte Lichter (z. B. Strobe und Ambient), gib jedem Kanal seine '
+              'Lichtquelle. Jede bekommt dann eigene Regler für Dimmer, Farbe und Strobe.',
+              style: TextStyle(color: s.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
             Row(children: [
               Text('Kanäle (${_channels.length})', style: Theme.of(context).textTheme.titleSmall),
               const Spacer(),
@@ -226,16 +419,20 @@ class _ProfileEditorState extends State<ProfileEditor> {
             }),
             itemBuilder: (context, i) {
               final c = _channels[i];
+              final clash = _clash(i);
               return Card(
                 key: c.key,
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                  child: Row(children: [
-                    CircleAvatar(radius: 14, child: Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: CircleAvatar(radius: 14, child: Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Column(children: [
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         TextField(
                           controller: c.name,
                           decoration: const InputDecoration(isDense: true, labelText: 'Bezeichnung'),
@@ -246,6 +443,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                             child: DropdownButtonFormField<ChannelType>(
                               initialValue: c.type,
                               isDense: true,
+                              isExpanded: true,
                               decoration: const InputDecoration(isDense: true, labelText: 'Funktion'),
                               items: [
                                 for (final t in ChannelType.values)
@@ -266,7 +464,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
-                            width: 84,
+                            width: 72,
                             child: TextFormField(
                               key: ValueKey(c.type),
                               initialValue: '${c.def}',
@@ -276,6 +474,21 @@ class _ProfileEditorState extends State<ProfileEditor> {
                             ),
                           ),
                         ]),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          Expanded(child: _partPicker(c)),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            icon: const Icon(Icons.tune, size: 18),
+                            label: Text(c.ranges.isEmpty ? 'Bereiche' : 'Bereiche (${c.ranges.length})'),
+                            onPressed: () => _editRanges(c),
+                          ),
+                        ]),
+                        if (clash != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(clash, style: TextStyle(color: s.error, fontSize: 12)),
+                          ),
                       ]),
                     ),
                     IconButton(
