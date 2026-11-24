@@ -16,6 +16,8 @@ class _NullTransport implements DmxTransport {
   @override
   int get sendErrors => 0;
   @override
+  Stream<ArtDmxIn> get dmxIn => const Stream.empty();
+  @override
   Future<void> open() async {}
   @override
   Future<void> close() async {}

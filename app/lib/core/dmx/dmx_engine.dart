@@ -24,6 +24,22 @@ class DmxEngine extends ChangeNotifier {
 
   final List<Uint8List> _prog = [];
   final List<Uint8List> _lastSent = [];
+
+  // Live-Abgleich mit anderen Steuerungen (Echo des Dongles)
+  final List<Int32List> _localChangeMs = []; // wann der Kanal hier zuletzt geändert wurde
+  final List<Set<int>> _adopted = []; // im aktuellen Takt vom Dongle übernommen
+  StreamSubscription<ArtDmxIn>? _echoSub;
+  int _remoteChanges = 0;
+
+  /// Ignoriert Echos für einen Kanal so lange nach einer eigenen Änderung
+  /// (das Echo kann noch den alten Stand enthalten).
+  static const _echoGuardMs = 600;
+
+  /// Live-Abgleich an/aus (Standard an).
+  bool syncEnabled = true;
+
+  /// Anzahl Kanaländerungen, die von anderen Steuerungen übernommen wurden.
+  int get remoteChanges => _remoteChanges;
   final List<int> _lastSendMs = [];
   final Map<int, Set<int>> _intensity = {}; // vom Grandmaster betroffene Kanäle
 
@@ -63,12 +79,15 @@ class DmxEngine extends ChangeNotifier {
   Future<void> start() async {
     transport.target = _settings.nodeIp;
     await transport.open();
+    _echoSub ??= transport.dmxIn.listen(_onEcho);
     _timer ??= Timer.periodic(_tick, (_) => _onTick());
   }
 
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
+    await _echoSub?.cancel();
+    _echoSub = null;
     await transport.close();
   }
 
@@ -83,11 +102,15 @@ class DmxEngine extends ChangeNotifier {
     final n = _settings.universeCount.clamp(1, 32);
     while (_prog.length < n) {
       _prog.add(Uint8List(512));
+      _localChangeMs.add(Int32List(512)..fillRange(0, 512, -1 << 30));
+      _adopted.add(<int>{});
       _lastSent.add(Uint8List(512));
       _lastSendMs.add(-_keepAliveMs);
     }
     while (_prog.length > n) {
       _prog.removeLast();
+      _localChangeMs.removeLast();
+      _adopted.removeLast();
       _lastSent.removeLast();
       _lastSendMs.removeLast();
     }
@@ -107,13 +130,17 @@ class DmxEngine extends ChangeNotifier {
     if (universe >= _prog.length || ch < 0 || ch > 511) return;
     _cancelFade();
     _prog[universe][ch] = _byte(value);
+    _localChangeMs[universe][ch] = _clock.elapsedMilliseconds;
     if (notify) notifyListeners();
   }
 
   void setMany(Iterable<(int, int, int)> values) {
     _cancelFade();
     for (final (u, ch, v) in values) {
-      if (u < _prog.length && ch >= 0 && ch < 512) _prog[u][ch] = _byte(v);
+      if (u < _prog.length && ch >= 0 && ch < 512) {
+        _prog[u][ch] = _byte(v);
+        _localChangeMs[u][ch] = _clock.elapsedMilliseconds;
+      }
     }
     notifyListeners();
   }
@@ -327,6 +354,44 @@ class DmxEngine extends ChangeNotifier {
     }
   }
 
+  // ---------- Live-Abgleich ----------
+
+  /// Gemischter Stand vom Dongle: was andere Steuerungen geändert haben, wird
+  /// übernommen, als hätte man es hier eingestellt. Fader zeigen es sofort.
+  void _onEcho(ArtDmxIn e) {
+    if (!syncEnabled) return;
+    final target = transport.target;
+    if (target != null && target.isNotEmpty && e.from != target) return;
+    final u = e.portAddress - portAddressFor(0);
+    if (u < 0 || u >= _prog.length) return;
+    applyRemote(u, e.data);
+  }
+
+  /// Öffentlich für Tests. data = gemischter Stand des Universe u.
+  void applyRemote(int u, Uint8List data) {
+    final now = _clock.elapsedMilliseconds;
+    final sent = _lastSent[u], prog = _prog[u], changedAt = _localChangeMs[u];
+    final mask = _intensity[u];
+    var changed = false;
+    final n = data.length < 512 ? data.length : 512;
+    for (var c = 0; c < n; c++) {
+      final v = data[c];
+      if (v == sent[c]) continue;
+      if (now - changedAt[c] < _echoGuardMs) continue;
+      var base = v;
+      if (mask != null && mask.contains(c)) {
+        // Grandmaster herausrechnen, damit hier wieder genau v rausgeht
+        if (_blackout || _grandMaster <= 0) continue;
+        base = (v / _grandMaster).round();
+      }
+      prog[c] = _byte(base);
+      _adopted[u].add(c);
+      changed = true;
+      _remoteChanges++;
+    }
+    if (changed) _dirtyUi = true;
+  }
+
   // ---------- Ausgabe ----------
 
   void _onTick() {
@@ -338,6 +403,11 @@ class DmxEngine extends ChangeNotifier {
     _applyEffects(now, base);
     for (var u = 0; u < _prog.length; u++) {
       final out = _computeOutput(u, base[u]);
+      final last = _lastSent[u], adopted = _adopted[u], changedAt = _localChangeMs[u];
+      for (var c = 0; c < 512; c++) {
+        if (out[c] != last[c] && !adopted.contains(c)) changedAt[c] = now;
+      }
+      adopted.clear();
       final changed = !_equals(out, _lastSent[u]);
       if (changed || now - _lastSendMs[u] >= _keepAliveMs) {
         transport.sendDmx(portAddressFor(u), out);
@@ -391,6 +461,7 @@ class DmxEngine extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _echoSub?.cancel();
     transport.close();
     super.dispose();
   }

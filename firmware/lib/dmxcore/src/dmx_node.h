@@ -7,6 +7,7 @@
 
 #include "artnet.h"
 #include "hal.h"
+#include "merger.h"
 
 namespace dmx {
 
@@ -25,12 +26,25 @@ enum class PacketResult { Ignored, DmxApplied, DmxNotForUs, PollReceived };
 class DmxNode {
  public:
   DmxNode(IDmxOutput* const* outputs, uint8_t numOutputs, const IClock& clock);
+  ~DmxNode();
+  DmxNode(const DmxNode&) = delete;
+  DmxNode& operator=(const DmxNode&) = delete;
 
   void setConfig(const NodeConfig& cfg) { cfg_ = cfg; }
   const NodeConfig& config() const { return cfg_; }
   uint8_t numPorts() const { return numOutputs_; }
 
-  PacketResult handlePacket(const uint8_t* buf, size_t len);
+  // sourceId/sourcePort: Absender (z.B. IPv4 als Zahl). Mehrere Absender auf
+  // demselben Universe werden gemischt, siehe merger.h.
+  PacketResult handlePacket(const uint8_t* buf, size_t len, uint32_t sourceId = 0,
+                            uint16_t sourcePort = artnet::kPort);
+
+  // Echo: gemischten Stand an die Steuerungen zurückschicken.
+  bool echoDue(uint8_t port, uint32_t minIntervalMs = 33, uint32_t keepAliveMs = 300);
+  const uint8_t* mergedData(uint8_t port) const { return mergers_[port].data(); }
+  uint16_t portAddressOf(uint8_t port) const;
+  uint8_t echoTargets(uint8_t port, uint32_t* ids, uint16_t* ports) const;
+  const Merger& merger(uint8_t port) const { return mergers_[port]; }
 
   // Port erhält Daten, wenn der letzte Frame jünger als timeoutMs ist.
   bool portActive(uint8_t port, uint32_t timeoutMs = 3000) const;
@@ -47,6 +61,7 @@ class DmxNode {
   uint32_t lastFrameMs_[kMaxPorts] = {};
   bool everReceived_[kMaxPorts] = {};
   uint32_t frames_ = 0;
+  Merger* mergers_;
 };
 
 }  // namespace dmx

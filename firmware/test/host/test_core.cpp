@@ -7,6 +7,7 @@
 
 #include "artnet.h"
 #include "dmx_node.h"
+#include "merger.h"
 
 struct FakeClock : dmx::IClock {
   uint32_t now = 0;
@@ -98,11 +99,125 @@ static void testPollReply() {
   assert(buf[201] == 1 && buf[206] == 6);
 }
 
+// Zwei Steuerungen: letzte Änderung gewinnt, Echo-Übernahme zählt nicht.
+static void testMergeTwoControllers() {
+  dmx::Merger m;
+  uint8_t a[512] = {}, b[512] = {};
+  const uint32_t A = 0xC0A80402, B = 0xC0A80403;  // Handy, PC
+
+  a[0] = 100;
+  assert(m.apply(A, 6454, a, 512, 0));           // allein: alles übernehmen
+  assert(m.data()[0] == 100);
+
+  b[1] = 50;                                      // PC kommt dazu, Startzustand
+  assert(!m.apply(B, 6454, b, 512, 10));          // zählt nicht
+  assert(m.data()[0] == 100 && m.data()[1] == 0);
+
+  b[1] = 60;                                      // PC ändert Kanal 2
+  assert(m.apply(B, 6454, b, 512, 20));
+  assert(m.data()[1] == 60 && m.data()[0] == 100);
+
+  assert(!m.apply(A, 6454, a, 512, 30));          // Handy unverändert: stört nicht
+  assert(m.data()[1] == 60);
+
+  a[1] = 10;                                      // Handy ändert denselben Kanal
+  assert(m.apply(A, 6454, a, 512, 40));
+  assert(m.data()[1] == 10);
+
+  // PC übernimmt das Echo (10) und sendet es: keine Änderung
+  b[1] = 10;
+  assert(!m.apply(B, 6454, b, 512, 60));
+  assert(m.data()[1] == 10);
+
+  // Handy fährt schnell (Fader/Effekt), PC folgt verzögert: veraltete Werte ignorieren
+  a[0] = 120; m.apply(A, 6454, a, 512, 100);
+  a[0] = 130; m.apply(A, 6454, a, 512, 125);
+  a[0] = 140; m.apply(A, 6454, a, 512, 150);
+  b[0] = 120; assert(!m.apply(B, 6454, b, 512, 160));
+  b[0] = 130; assert(!m.apply(B, 6454, b, 512, 185));
+  assert(m.data()[0] == 140);
+
+  // Viel später setzt der PC bewusst 120 (alter Handy-Wert, außerhalb des Fensters)
+  b[0] = 100; m.apply(B, 6454, b, 512, 3000);
+  a[0] = 140; m.apply(A, 6454, a, 512, 3000);   // Handy lebt noch
+  assert(m.data()[0] == 100);
+  b[0] = 120; assert(m.apply(B, 6454, b, 512, 3100));
+  assert(m.data()[0] == 120);
+
+  // Ein einzelner Sender darf schnell hin und her (kein Echo-Filter)
+  dmx::Merger s;
+  uint8_t c[4] = {10, 0, 0, 0};
+  s.apply(A, 6454, c, 4, 0);
+  c[0] = 20; s.apply(A, 6454, c, 4, 25);
+  c[0] = 10; assert(s.apply(A, 6454, c, 4, 50));
+  assert(s.data()[0] == 10);
+}
+
+static void testMergeSourcesAndEcho() {
+  dmx::Merger m;
+  uint8_t d[512] = {};
+  uint32_t ids[dmx::kMaxSources];
+  uint16_t ports[dmx::kMaxSources];
+
+  m.apply(1, 6454, d, 512, 0);
+  m.apply(2, 50000, d, 512, 100);
+  assert(m.activeSources(200, ids, ports) == 2);
+  assert(ports[1] == 50000);
+
+  assert(m.echoDue(200));                 // erstes Echo sofort
+  assert(!m.echoDue(210));                // nichts geändert
+  d[5] = 1;
+  m.apply(1, 6454, d, 512, 220);
+  assert(!m.echoDue(225));                // noch keine 33 ms seit dem letzten
+  assert(m.echoDue(240));
+  assert(!m.echoDue(500));
+  assert(m.echoDue(600));                 // Lebenszeichen nach 0,3 s
+
+  // Sender 2 meldet sich nicht mehr
+  m.apply(1, 6454, d, 512, 4000);
+  assert(m.activeSources(4200, ids, ports) == 1 && ids[0] == 1);
+
+  // mehr als kMaxSources: ältester fliegt raus, kein Absturz
+  for (uint32_t i = 10; i < 20; ++i) m.apply(i, 6454, d, 512, 5000 + i);
+  assert(m.activeSources(5100, nullptr, nullptr) == dmx::kMaxSources);
+}
+
+static void testNodeEcho() {
+  FakeClock clk;
+  FakeOutput a;
+  dmx::IDmxOutput* outs[] = {&a};
+  dmx::DmxNode node(outs, 1, clk);
+  dmx::NodeConfig cfg;
+  cfg.universe[0] = 0;
+  node.setConfig(cfg);
+  assert(!node.echoDue(0));               // noch nichts empfangen
+
+  uint8_t data[512] = {};
+  uint8_t buf[600];
+  data[0] = 255;
+  size_t n = artnet::buildDmx(0, 1, data, 512, buf, sizeof(buf));
+  clk.now = 100;
+  assert(node.handlePacket(buf, n, 0x0A000001, 6454) == dmx::PacketResult::DmxApplied);
+  data[0] = 0; data[1] = 77;
+  n = artnet::buildDmx(0, 1, data, 512, buf, sizeof(buf));
+  clk.now = 120;
+  node.handlePacket(buf, n, 0x0A000002, 6454);   // zweiter Sender, Startzustand
+  assert(a.last.size() == 512 && a.last[0] == 255 && a.last[1] == 0);
+  assert(node.echoDue(0));
+  uint32_t ids[4];
+  uint16_t ports[4];
+  assert(node.echoTargets(0, ids, ports) == 2);
+  assert(node.mergedData(0)[0] == 255);
+}
+
 int main() {
   testPortAddress();
   testDmxRoundTrip();
   testNodeRouting();
   testPollReply();
+  testMergeTwoControllers();
+  testMergeSourcesAndEcho();
+  testNodeEcho();
   std::puts("Alle Kern-Tests bestanden.");
   return 0;
 }

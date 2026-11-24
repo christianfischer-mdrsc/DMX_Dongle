@@ -27,6 +27,9 @@ abstract class DmxTransport {
   Future<List<ArtNetNode>> discover(
       {Duration timeout = const Duration(seconds: 2)});
 
+  /// Empfangene ArtDmx-Frames (Echo des Dongles für den Live-Abgleich).
+  Stream<ArtDmxIn> get dmxIn;
+
   int get packetsSent;
 
   /// Pakete, die das Betriebssystem nicht annehmen wollte.

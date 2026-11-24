@@ -51,6 +51,17 @@ class ArtNet {
     return b[8] | (b[9] << 8);
   }
 
+  /// Empfangenes ArtDmx (z.B. das Echo des Dongles mit dem gemischten Stand).
+  static ArtDmxIn? parseDmx(Uint8List b, String from) {
+    if (b.length < 20 || opCode(b) != opDmx) return null;
+    final pa = b[14] | ((b[15] & 0x7F) << 8);
+    var len = (b[16] << 8) | b[17];
+    if (len > 512) len = 512;
+    if (len > b.length - 18) len = b.length - 18;
+    if (len <= 0) return null;
+    return ArtDmxIn(pa, Uint8List.fromList(b.sublist(18, 18 + len)), from);
+  }
+
   static ArtNetNode? parsePollReply(Uint8List b) {
     if (b.length < 207 || opCode(b) != opPollReply) return null;
     String str(int off, int len) {
@@ -72,6 +83,14 @@ class ArtNet {
           .join(':'),
     );
   }
+}
+
+class ArtDmxIn {
+  const ArtDmxIn(this.portAddress, this.data, this.from);
+  final int portAddress;
+  final Uint8List data;
+  /// IP des Absenders.
+  final String from;
 }
 
 class ArtNetNode {

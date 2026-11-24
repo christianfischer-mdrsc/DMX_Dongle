@@ -8,9 +8,29 @@ DmxNode::DmxNode(IDmxOutput* const* outputs, uint8_t numOutputs,
                  const IClock& clock)
     : outputs_(outputs),
       numOutputs_(numOutputs > kMaxPorts ? kMaxPorts : numOutputs),
-      clock_(clock) {}
+      clock_(clock),
+      mergers_(new Merger[numOutputs_ ? numOutputs_ : 1]) {}
 
-PacketResult DmxNode::handlePacket(const uint8_t* buf, size_t len) {
+DmxNode::~DmxNode() { delete[] mergers_; }
+
+uint16_t DmxNode::portAddressOf(uint8_t port) const {
+  return artnet::portAddress(cfg_.net, cfg_.subnet, cfg_.universe[port]);
+}
+
+bool DmxNode::echoDue(uint8_t port, uint32_t minIntervalMs, uint32_t keepAliveMs) {
+  if (port >= numOutputs_ || !everReceived_[port]) return false;
+  const uint32_t now = clock_.millis();
+  if (mergers_[port].activeSources(now, nullptr, nullptr) == 0) return false;
+  return mergers_[port].echoDue(now, minIntervalMs, keepAliveMs);
+}
+
+uint8_t DmxNode::echoTargets(uint8_t port, uint32_t* ids, uint16_t* ports) const {
+  if (port >= numOutputs_) return 0;
+  return mergers_[port].activeSources(clock_.millis(), ids, ports);
+}
+
+PacketResult DmxNode::handlePacket(const uint8_t* buf, size_t len,
+                                   uint32_t sourceId, uint16_t sourcePort) {
   switch (artnet::opCode(buf, len)) {
     case artnet::OpCode::Poll:
       return PacketResult::PollReceived;
@@ -22,8 +42,10 @@ PacketResult DmxNode::handlePacket(const uint8_t* buf, size_t len) {
       for (uint8_t p = 0; p < numOutputs_; ++p) {
         uint16_t addr = artnet::portAddress(cfg_.net, cfg_.subnet, cfg_.universe[p]);
         if (addr != pkt.portAddress) continue;
-        outputs_[p]->write(pkt.data, pkt.length);
-        lastFrameMs_[p] = clock_.millis();
+        const uint32_t now = clock_.millis();
+        mergers_[p].apply(sourceId, sourcePort, pkt.data, pkt.length, now);
+        outputs_[p]->write(mergers_[p].data(), kUniverseSize);
+        lastFrameMs_[p] = now;
         everReceived_[p] = true;
         applied = true;
       }

@@ -170,7 +170,7 @@ class SettingsScreen extends StatelessWidget {
                     child: Image.asset('assets/logo.png', width: 40, height: 40),
                   ),
                   title: const Text('DMX Master'),
-                  subtitle: const Text('Version 0.6.0 · Art-Net 4'),
+                  subtitle: const Text('Version 0.7.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(

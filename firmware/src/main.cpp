@@ -261,7 +261,9 @@ void pollUdp() {
     if (n <= 0) continue;
     ++gUdpCount;
     gUdpLastFrom = gUdp.remoteIP();
-    const auto result = gNode.handlePacket(gRx, static_cast<size_t>(n));
+    const auto result = gNode.handlePacket(gRx, static_cast<size_t>(n),
+                                           static_cast<uint32_t>(gUdp.remoteIP()),
+                                           gUdp.remotePort());
     if (result != dmx::PacketResult::Ignored) {
       if (!gLastArtnetAt || millis() - gLastArtnetAt >= MASTER_TIMEOUT_MS)
         Serial.printf("[ArtNet] Steuerung gefunden: %s\n", gUdp.remoteIP().toString().c_str());
@@ -278,6 +280,29 @@ void pollUdp() {
         break;
       default:
         break;
+    }
+  }
+}
+
+// Live-Abgleich: den gemischten Stand jedes Ausgangs an alle Steuerungen
+// zurückschicken (bei Änderung max. 30/s, sonst alle 0,3 s). So sieht das Handy, was
+// am PC geändert wird, und umgekehrt.
+uint8_t gEcho[18 + 512];
+uint8_t gEchoSeq[DMX_NUM_PORTS] = {};
+
+void sendEchoes() {
+  for (uint8_t p = 0; p < DMX_NUM_PORTS; ++p) {
+    if (!gNode.echoDue(p)) continue;
+    uint32_t ids[dmx::kMaxSources];
+    uint16_t ports[dmx::kMaxSources];
+    const uint8_t n = gNode.echoTargets(p, ids, ports);
+    if (++gEchoSeq[p] == 0) gEchoSeq[p] = 1;
+    const size_t len = artnet::buildDmx(gNode.portAddressOf(p), gEchoSeq[p], gNode.mergedData(p),
+                                        512, gEcho, sizeof(gEcho));
+    for (uint8_t i = 0; i < n; ++i) {
+      gUdp.beginPacket(IPAddress(ids[i]), ports[i]);
+      gUdp.write(gEcho, len);
+      gUdp.endPacket();
     }
   }
 }
@@ -358,6 +383,7 @@ void setup() {
 
 void loop() {
   pollUdp();
+  sendEchoes();
   gWeb.handleClient();
   checkResetButton();
   updateLedMode();

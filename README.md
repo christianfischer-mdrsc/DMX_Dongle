@@ -105,6 +105,18 @@ Die Steuerung gilt als verloren, wenn 5 s kein Art-Net kommt.
 
 ---
 
+### Mehrere Steuerungen gleichzeitig (Live-Abgleich, ab Firmware 1.3.0)
+
+Handy und PC (DMX-Simulator) können gleichzeitig steuern. Jede Steuerung sieht live, was die andere ändert.
+
+- **Letzte Änderung gewinnt, je Kanal:** Der Dongle merkt sich für jeden Sender (IP) seinen letzten Frame. Nur wenn ein Sender einen Kanal *ändert*, übernimmt der Dongle den neuen Wert. Unveränderte Kanäle eines Senders überschreiben also nichts.
+- **Echo:** Den gemischten Stand jedes Ausgangs schickt der Dongle als ArtDmx an alle Sender der letzten 4 s zurück, an deren IP und Absender-Port. Das geschieht bei Änderung höchstens 30-mal pro Sekunde, sonst alle 0,3 s.
+- **Steuerungen übernehmen das Echo:** Die App schreibt fremde Änderungen in ihre Kanalwerte, die Fader zeigen sie sofort. Der Simulator legt sie über seine Ausgabe, bis man den Kanal dort selbst anfasst. Für 0,6 s nach einer eigenen Änderung wird das Echo eines Kanals ignoriert, weil es noch den alten Stand enthalten kann.
+- **Kein Hin- und Herspringen:** Schickt eine Steuerung einen Wert zurück, den kurz zuvor (1,5 s) eine *andere* gesetzt hat, gilt das nicht als neue Änderung.
+- **Eine neue Steuerung überschreibt nichts:** Ihr erster Frame zählt nicht, wenn schon eine andere aktiv ist. Sie übernimmt stattdessen den aktuellen Stand.
+- Ältere App-Versionen funktionieren weiter, sie zeigen nur fremde Änderungen nicht an.
+- Bis zu 4 Sender je Ausgang. Speicher: rund 20 KB je Ausgang.
+
 ## App
 
 Voraussetzung: [Flutter SDK](https://docs.flutter.dev/get-started/install) (3.35+), Android Studio für das Android-SDK.

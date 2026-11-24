@@ -12,6 +12,10 @@ class ArtNetTransportIo implements DmxTransport {
   RawDatagramSocket? _socket;
   final Map<int, int> _seq = {};
   final _replies = StreamController<ArtNetNode>.broadcast();
+  final _dmx = StreamController<ArtDmxIn>.broadcast();
+
+  @override
+  Stream<ArtDmxIn> get dmxIn => _dmx.stream;
   int _sent = 0;
   int _errors = 0;
 
@@ -43,8 +47,14 @@ class ArtNetTransportIo implements DmxTransport {
       if (event != RawSocketEvent.read) return;
       final dg = s.receive();
       if (dg == null) return;
-      final node = ArtNet.parsePollReply(dg.data);
-      if (node != null) _replies.add(node);
+      switch (ArtNet.opCode(dg.data)) {
+        case ArtNet.opPollReply:
+          final node = ArtNet.parsePollReply(dg.data);
+          if (node != null) _replies.add(node);
+        case ArtNet.opDmx:
+          final d = ArtNet.parseDmx(dg.data, dg.address.address);
+          if (d != null) _dmx.add(d);
+      }
     });
     _socket = s;
   }
