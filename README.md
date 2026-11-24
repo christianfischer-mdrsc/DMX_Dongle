@@ -105,7 +105,7 @@ Die Steuerung gilt als verloren, wenn 5 s kein Art-Net kommt.
 
 ---
 
-### Dongle per USB-C am Handy (ab Firmware 1.4.0, App 0.7.0, nur Android)
+### Dongle per USB-C am Handy (ab Firmware 1.4.0, App 0.8.0, nur Android)
 
 Der Dongle kann direkt per USB-C-Kabel am Handy hängen. Das Handy ist dabei USB-Host und versorgt ihn mit Strom. Die Platine hat die CC-Widerstände dafür.
 
