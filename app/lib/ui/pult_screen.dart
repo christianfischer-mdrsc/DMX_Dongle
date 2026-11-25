@@ -738,6 +738,7 @@ class _PanelTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 6, 4, 2),
+      // Schmal (Handy quer): Knöpfe dürfen seitlich scrollen statt überzulaufen
       child: Row(children: [
         Expanded(
           child: Text(text,
@@ -745,7 +746,14 @@ class _PanelTitle extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         ),
-        ...trailing,
+        Flexible(
+          flex: 4,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true,
+            child: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+          ),
+        ),
       ]),
     );
   }
