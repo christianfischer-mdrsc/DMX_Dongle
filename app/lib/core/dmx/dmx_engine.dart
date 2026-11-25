@@ -94,6 +94,10 @@ class DmxEngine extends ChangeNotifier {
     _timer ??= Timer.periodic(_tick, (_) => _onTick());
   }
 
+  /// Nur für Tests und Screenshots: einen Takt ohne Timer rechnen.
+  @visibleForTesting
+  void debugTick() => _onTick();
+
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;

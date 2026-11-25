@@ -1,0 +1,29 @@
+name: Screenshots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Schriften holen
+        run: |
+          mkdir -p fonts
+          curl -sL -o fonts/Roboto.ttf "https://github.com/google/fonts/raw/main/ofl/roboto/Roboto%5Bwdth,wght%5D.ttf"
+          cp "$(dirname $(which flutter))/cache/artifacts/material_fonts/MaterialIcons-Regular.otf" fonts/
+          ls -la fonts
+      - run: flutter test screenshot_test --update-goldens
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: app/screenshot_test/shots/*.png
