@@ -55,6 +55,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pult-Ansicht auch auf dem Handy anbieten (Tablet: immer).
+  bool pultOnPhone = false;
+
+  void setPultOnPhone(bool v) {
+    pultOnPhone = v;
+    storage.saveString('pultOnPhone', '$v');
+    notifyListeners();
+  }
+
+  /// Seitenleiste ausgeklappt? null = Standard (Tablet offen, Handy zu).
+  bool? navOpen;
+
+  void setNavOpen(bool v) {
+    navOpen = v;
+    storage.saveString('navOpen', '$v');
+    notifyListeners();
+  }
+
   // ---------- Konto & Freischaltungen ----------
 
   UserAccount? user;
@@ -223,6 +241,9 @@ class AppState extends ChangeNotifier {
     themeMode = ThemeMode.values.firstWhere((m) => m.name == tm, orElse: () => ThemeMode.light);
     final cl = storage.loadString('controlLayout');
     controlLayout = ControlLayout.values.firstWhere((m) => m.name == cl, orElse: () => ControlLayout.tabs);
+    pultOnPhone = storage.loadString('pultOnPhone') == 'true';
+    final no = storage.loadString('navOpen');
+    navOpen = no == null ? null : no == 'true';
     customProfiles.addAll(storage.loadProfiles());
     fixtures.addAll(storage.loadFixtures());
     scenes.addAll(storage.loadScenes());

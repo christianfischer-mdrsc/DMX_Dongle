@@ -103,6 +103,15 @@ class SettingsScreen extends StatelessWidget {
               ]),
               const _Header('Darstellung'),
               _Group(children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.dashboard_customize_outlined),
+                  title: const Text('Pult auf dem Handy'),
+                  subtitle: const Text('Profi-Ansicht mit Programmer, Abruf und Fadern auch am Handy anzeigen. '
+                      'Auf dem Tablet ist sie immer da.'),
+                  value: app.pultOnPhone,
+                  onChanged: app.setPultOnPhone,
+                ),
+                const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -198,7 +207,7 @@ class SettingsScreen extends StatelessWidget {
                     child: Image.asset('assets/logo.png', width: 40, height: 40),
                   ),
                   title: const Text('DMX Master'),
-                  subtitle: const Text('Version 0.9.0 · Art-Net 4'),
+                  subtitle: const Text('Version 0.9.1 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(

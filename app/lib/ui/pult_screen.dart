@@ -22,6 +22,7 @@ class PultScreen extends StatefulWidget {
 class _PultScreenState extends State<PultScreen> {
   final List<String> _selection = []; // Reihenfolge der Auswahl zählt (Effekte)
   int _rightTab = 0;
+  int _view = 0; // kompakte Ansicht: welcher Bereich
 
   void _toggle(String id) => setState(() => _selection.contains(id) ? _selection.remove(id) : _selection.add(id));
 
@@ -43,8 +44,6 @@ class _PultScreenState extends State<PultScreen> {
       builder: (context, app) {
         _selection.removeWhere((id) => app.fixtureById(id) == null);
         final chosen = app.fixturesByIds(_selection);
-        final w = MediaQuery.sizeOf(context).width;
-        final threeCols = w >= 1100;
         final s = Theme.of(context).colorScheme;
 
         final pools = _PoolPanel(
@@ -75,45 +74,94 @@ class _PultScreenState extends State<PultScreen> {
               child: child,
             );
 
+        final flat = MediaQuery.sizeOf(context).height < 520; // Handy quer
+
         return Scaffold(
           appBar: AppBar(
+            toolbarHeight: flat ? 44 : null,
             title: const Text('Pult'),
             actions: [
               if (chosen.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: Chip(label: Text('${chosen.length} gewählt')),
+                  child: ActionChip(
+                    label: Text('${chosen.length} gewählt'),
+                    avatar: const Icon(Icons.close, size: 16),
+                    onPressed: () => setState(_selection.clear),
+                  ),
                 ),
               const ConnectionChip(),
             ],
           ),
-          body: Column(children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                child: threeCols
-                    ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        SizedBox(width: 340, child: panel(pools)),
-                        const SizedBox(width: 8),
-                        Expanded(child: panel(programmer)),
-                        const SizedBox(width: 8),
-                        SizedBox(width: 300, child: panel(playback)),
-                      ])
-                    : Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        SizedBox(width: 300, child: panel(pools)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(children: [
-                            Expanded(flex: 3, child: panel(programmer)),
-                            const SizedBox(height: 8),
-                            Expanded(flex: 2, child: panel(playback)),
-                          ]),
-                        ),
-                      ]),
+          body: LayoutBuilder(builder: (context, c) {
+            final w = c.maxWidth, h = c.maxHeight;
+            // Fader-Leiste wächst mit dem Bildschirm, bleibt aber bedienbar
+            final wingH = (h * 0.3).clamp(112.0, 196.0);
+            final compact = w < 640 || h < 560;
+            const gap = SizedBox(width: 8, height: 8);
+
+            Widget tabbed(List<(String, Widget)> views) {
+              final i = _view.clamp(0, views.length - 1);
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: SegmentedButton<int>(
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    segments: [
+                      for (var k = 0; k < views.length; k++) ButtonSegment(value: k, label: Text(views[k].$1)),
+                    ],
+                    selected: {i},
+                    onSelectionChanged: (v) => setState(() => _view = v.first),
+                  ),
+                ),
+                Expanded(child: panel(views[i].$2)),
+              ]);
+            }
+
+            final programmerLabel = chosen.isEmpty ? 'Programmer' : 'Programmer (${chosen.length})';
+            Widget main;
+            if (w >= 1100 && h >= 560) {
+              main = Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(width: 340, child: panel(pools)),
+                gap,
+                Expanded(child: panel(programmer)),
+                gap,
+                SizedBox(width: 300, child: panel(playback)),
+              ]);
+            } else if (w >= 640) {
+              final poolW = (w * 0.34).clamp(220.0, 320.0);
+              main = Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(width: poolW, child: panel(pools)),
+                gap,
+                Expanded(
+                  child: h >= 560
+                      ? Column(children: [
+                          Expanded(flex: 3, child: panel(programmer)),
+                          gap,
+                          Expanded(flex: 2, child: panel(playback)),
+                        ])
+                      : tabbed([(programmerLabel, programmer), ('Abruf', playback)]),
+                ),
+              ]);
+            } else {
+              // Handy hochkant: alles nacheinander über Reiter
+              main = tabbed([('Geräte', pools), (programmerLabel, programmer), ('Abruf', playback)]);
+            }
+
+            return Column(children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(compact ? 6 : 10, 0, compact ? 6 : 10, compact ? 6 : 8),
+                  child: main,
+                ),
               ),
-            ),
-            _FaderWing(app: app),
-          ]),
+              _FaderWing(app: app, height: wingH, compact: compact),
+            ]);
+          }),
         );
       },
     );
@@ -524,8 +572,10 @@ class _PlaybackPanel extends StatelessWidget {
 /// Untere Leiste wie die Playback-Fader eines Pults:
 /// ein Master je Gruppe, Grandmaster, Blackout, Tempo.
 class _FaderWing extends StatelessWidget {
-  const _FaderWing({required this.app});
+  const _FaderWing({required this.app, this.height = 196, this.compact = false});
   final AppState app;
+  final double height;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -536,7 +586,7 @@ class _FaderWing extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 196,
+          height: height,
           child: ListenableBuilder(
             listenable: Listenable.merge([app, app.engine]),
             builder: (context, _) {
@@ -546,8 +596,10 @@ class _FaderWing extends StatelessWidget {
                   child: app.groups.isEmpty
                       ? Center(
                           child: Text(
-                            'Gruppen anlegen (im Tab „Steuern“ Lampen wählen → Gruppe speichern),\n'
-                            'dann bekommt jede Gruppe hier einen eigenen Fader.',
+                            compact
+                                ? 'Gruppen anlegen → je Gruppe ein Fader'
+                                : 'Gruppen anlegen (im Tab „Steuern“ Lampen wählen → Gruppe speichern),\n'
+                                    'dann bekommt jede Gruppe hier einen eigenen Fader.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: s.onSurfaceVariant),
                           ),
@@ -558,6 +610,7 @@ class _FaderWing extends StatelessWidget {
                           children: [
                             for (final g in app.groups)
                               _WingFader(
+                                compact: compact,
                                 label: g.name,
                                 value: app.groupMaster(g),
                                 onChanged: (v) => app.setGroupMaster(g, v),
@@ -567,15 +620,16 @@ class _FaderWing extends StatelessWidget {
                 ),
                 VerticalDivider(width: 1, color: s.outlineVariant),
                 _WingFader(
-                  label: 'Grand\nMaster',
+                  compact: compact,
+                  label: compact ? 'GM' : 'Grand\nMaster',
                   value: e.grandMaster,
                   color: s.primary,
                   onChanged: (v) => e.grandMaster = v,
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+                  padding: EdgeInsets.fromLTRB(compact ? 4 : 8, compact ? 6 : 10, compact ? 6 : 12, compact ? 6 : 10),
                   child: SizedBox(
-                    width: 120,
+                    width: compact ? 84 : 120,
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Expanded(
                         child: FilledButton(
@@ -616,7 +670,9 @@ class _FaderWing extends StatelessWidget {
 }
 
 class _WingFader extends StatelessWidget {
-  const _WingFader({required this.label, required this.value, required this.onChanged, this.color});
+  const _WingFader(
+      {required this.label, required this.value, required this.onChanged, this.color, this.compact = false});
+  final bool compact;
   final String label;
   final double value;
   final ValueChanged<double> onChanged;
@@ -626,9 +682,9 @@ class _WingFader extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 72,
+      width: compact ? 54 : 72,
       child: Column(children: [
-        const SizedBox(height: 8),
+        SizedBox(height: compact ? 4 : 8),
         Text('${(value * 100).round()}',
             style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
         Expanded(
@@ -645,14 +701,14 @@ class _WingFader extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 30,
+          height: compact ? 16 : 30,
           child: Text(label,
-              maxLines: 2,
+              maxLines: compact ? 1 : 2,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, height: 1.1, color: s.onSurfaceVariant)),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: compact ? 2 : 6),
       ]),
     );
   }

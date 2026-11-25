@@ -24,7 +24,7 @@ Future<void> _font(String family, String path) async {
   await loader.load();
 }
 
-Future<AppState> _demo(ControlLayout layout) async {
+Future<AppState> _demo(ControlLayout layout, {bool? nav}) async {
   SharedPreferences.setMockInitialValues({});
   final storage = Storage();
   await storage.init();
@@ -52,6 +52,8 @@ Future<AppState> _demo(ControlLayout layout) async {
   }
   a.saveChase(Chase(id: 'c1', name: 'Show-Lauf', steps: [ChaseStep(sceneId: a.scenes.first.id)]));
   a.setControlLayout(layout);
+  a.setPultOnPhone(true);
+  if (nav != null) a.setNavOpen(nav);
   for (var i = 0; i < 20; i++) {
     engine.debugTick();
   }
@@ -79,16 +81,24 @@ void main() {
   });
 
   Future<void> shot(WidgetTester t, String name, Size size, ControlLayout layout,
-      {ThemeMode mode = ThemeMode.dark, String? tab}) async {
+      {ThemeMode mode = ThemeMode.dark, String? tab, bool? nav, String? select, String? view}) async {
     t.view.physicalSize = size * 2;
     t.view.devicePixelRatio = 2;
     addTearDown(t.view.reset);
-    final a = await _demo(layout);
+    final a = await _demo(layout, nav: nav);
     await t.pumpWidget(_wrap(a, mode));
     await t.pump(const Duration(milliseconds: 100));
     if (tab != null) {
       await t.tap(find.text(tab).last);
       await t.pump(const Duration(milliseconds: 400));
+    }
+    if (select != null) {
+      await t.tap(find.text(select).first);
+      await t.pump(const Duration(milliseconds: 300));
+    }
+    if (view != null) {
+      await t.tap(find.textContaining(view).first);
+      await t.pump(const Duration(milliseconds: 300));
     }
     // ein paar Takte, damit Live-Werte und Effekte zu sehen sind
     for (var i = 0; i < 6; i++) {
@@ -101,11 +111,21 @@ void main() {
     await t.pump(const Duration(seconds: 1));
   }
 
-  testWidgets('Tablet Pult', (t) => shot(t, 'tablet_pult', const Size(1280, 800), ControlLayout.tabs, tab: 'Pult'));
-  testWidgets('Tablet Pult schmal',
+  testWidgets('Tablet Pult', (t) => shot(t, 'tablet_pult', const Size(1280, 800), ControlLayout.tabs, tab: 'Pult', select: 'PARs'));
+  testWidgets('Tablet Pult hoch',
       (t) => shot(t, 'tablet_pult_hoch', const Size(800, 1280), ControlLayout.tabs, tab: 'Pult'));
   testWidgets('Tablet Steuern nebeneinander',
       (t) => shot(t, 'tablet_steuern_nebeneinander', const Size(1280, 800), ControlLayout.columns));
-  testWidgets('Handy Steuern', (t) => shot(t, 'handy_steuern', const Size(412, 915), ControlLayout.tabs));
-  testWidgets('Handy quer', (t) => shot(t, 'handy_quer', const Size(915, 412), ControlLayout.tabs));
+  testWidgets('Handy Steuern (Leiste zu)', (t) => shot(t, 'handy_steuern', const Size(412, 915), ControlLayout.tabs));
+  testWidgets('Handy Steuern (Leiste offen)',
+      (t) => shot(t, 'handy_steuern_leiste', const Size(412, 915), ControlLayout.tabs, nav: true));
+  testWidgets('Handy Pult Geräte',
+      (t) => shot(t, 'handy_pult_geraete', const Size(412, 915), ControlLayout.tabs, nav: true, tab: 'Pult', select: 'PARs'));
+  testWidgets('Handy Pult Programmer',
+      (t) => shot(t, 'handy_pult_programmer', const Size(412, 915), ControlLayout.tabs,
+          nav: true, tab: 'Pult', select: 'PARs', view: 'Programmer'));
+  testWidgets('Handy Pult Abruf',
+      (t) => shot(t, 'handy_pult_abruf', const Size(412, 915), ControlLayout.tabs, nav: true, tab: 'Pult', view: 'Abruf'));
+  testWidgets('Handy quer Pult',
+      (t) => shot(t, 'handy_quer_pult', const Size(915, 412), ControlLayout.tabs, nav: true, tab: 'Pult', select: 'PARs'));
 }
