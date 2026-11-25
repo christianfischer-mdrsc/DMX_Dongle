@@ -585,7 +585,7 @@ class _FaderWing extends StatelessWidget {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           onPressed: () => e.blackout = !e.blackout,
-                          child: const Text('BLACKOUT', style: TextStyle(fontWeight: FontWeight.w800)),
+                          child: const FittedBox(child: Text('BLACKOUT', style: TextStyle(fontWeight: FontWeight.w800))),
                         ),
                       ),
                       const SizedBox(height: 8),
