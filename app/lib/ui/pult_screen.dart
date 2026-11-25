@@ -154,7 +154,7 @@ class _PultScreenState extends State<PultScreen> {
 
             // Handy quer: zu flach für eine Leiste unten → Fader als Spalte rechts, volle Höhe
             if (h < 480 && w >= 640) {
-              final wingW = (app.groups.length * 54.0 + 54 + 96).clamp(160.0, w * 0.36);
+              final wingW = (app.groups.length * 54.0 + 172).clamp(160.0, w * 0.4);
               return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Expanded(
                   child: Padding(padding: const EdgeInsets.fromLTRB(6, 0, 6, 6), child: main),
