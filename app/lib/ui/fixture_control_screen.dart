@@ -16,18 +16,6 @@ class FixtureControlScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppListener(builder: (context, app) {
       final first = fixtures.first;
-      final profiles = fixtures.map(app.profileOf).whereType<FixtureProfile>().toList();
-      final ref = app.profileOf(first);
-      final sameProfile = profiles.every((p) => p.id == ref?.id);
-      bool any(bool Function(FixtureProfile) t) => profiles.any(t);
-      // Lichtquellen aller gewählten Lampen (z. B. „Strobe“ und „Ambient“)
-      final parts = <String>[
-        for (final p in profiles)
-          for (final x in p.parts) x,
-      ].toSet().toList();
-      if (parts.isEmpty) parts.add('');
-      final multi = parts.length > 1 || parts.first.isNotEmpty;
-
       return Scaffold(
         appBar: AppBar(
           title: Text(fixtures.length == 1 ? first.name : '${fixtures.length} Lampen'),
@@ -70,8 +58,42 @@ class FixtureControlScreen extends StatelessWidget {
               ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        body: FixtureProgrammer(fixtures: fixtures),
+      );
+    });
+  }
+}
+
+/// Alle Bedienelemente für eine oder mehrere Lampen: Lichtquellen (Dimmer,
+/// Farbe, Strobe …), Position und – bei gleichem Gerätetyp – jeder Kanal.
+/// Wird im Steuern-Bildschirm und im Pult (Tablet) genutzt.
+class FixtureProgrammer extends StatelessWidget {
+  const FixtureProgrammer({
+    super.key,
+    required this.fixtures,
+    this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 32),
+  });
+  final List<Fixture> fixtures;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppListener(builder: (context, app) {
+      if (fixtures.isEmpty) return const SizedBox.shrink();
+      final first = fixtures.first;
+      final profiles = fixtures.map(app.profileOf).whereType<FixtureProfile>().toList();
+      final ref = app.profileOf(first);
+      final sameProfile = profiles.every((p) => p.id == ref?.id);
+      bool any(bool Function(FixtureProfile) t) => profiles.any(t);
+      final parts = <String>[
+        for (final p in profiles)
+          for (final x in p.parts) x,
+      ].toSet().toList();
+      if (parts.isEmpty) parts.add('');
+      final multi = parts.length > 1 || parts.first.isNotEmpty;
+
+      return ListView(
+          padding: padding,
           children: [
             for (final part in parts) ..._partSections(app, fixtures, profiles, part, multi),
             if (any((p) => p.hasPanTilt))
@@ -101,8 +123,7 @@ class FixtureControlScreen extends StatelessWidget {
                 ]),
               ),
           ],
-        ),
-      );
+        );
     });
   }
 }

@@ -7,6 +7,7 @@ import 'faders_screen.dart';
 import 'fixtures_screen.dart';
 import 'live_screen.dart';
 import 'network_screen.dart';
+import 'pult_screen.dart';
 import 'scenes_screen.dart';
 import 'settings_screen.dart';
 
@@ -20,47 +21,58 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
-  static const _settingsTab = 4;
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _tab, children: [
+    // Tablet (quer oder groß): zusätzlicher Tab „Pult“
+    final tablet = MediaQuery.sizeOf(context).shortestSide >= 600;
+    final pages = <(Widget, NavigationDestination)>[
+      (
         const FixturesScreen(),
-        LiveScreen(active: _tab == 1),
+        const NavigationDestination(
+            icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'Steuern')
+      ),
+      if (tablet)
+        (
+          const PultScreen(),
+          const NavigationDestination(
+              icon: Icon(Icons.dashboard_customize_outlined),
+              selectedIcon: Icon(Icons.dashboard_customize),
+              label: 'Pult')
+        ),
+      (
+        LiveScreen(active: _tab == (tablet ? 2 : 1)),
+        const NavigationDestination(icon: Icon(Icons.bolt_outlined), selectedIcon: Icon(Icons.bolt), label: 'Live')
+      ),
+      (
         const ScenesScreen(),
+        const NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'Szenen')
+      ),
+      (
         const FadersScreen(),
+        const NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune), label: 'Fader')
+      ),
+      (
         const SettingsScreen(),
-      ]),
+        const NavigationDestination(
+            icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Mehr')
+      ),
+    ];
+    final tab = _tab.clamp(0, pages.length - 1);
+    final current = pages[tab].$1;
+    // Pult hat eigene Master-Fader, Einstellungen brauchen keine
+    final showMaster = current is! SettingsScreen && current is! PultScreen;
+
+    return Scaffold(
+      body: IndexedStack(index: tab, children: [for (final p in pages) p.$1]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_tab != _settingsTab) const MasterBar(),
+          if (showMaster) const MasterBar(),
           NavigationBar(
-            selectedIndex: _tab,
+            selectedIndex: tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
-            destinations: const [
-              NavigationDestination(
-                  icon: Icon(Icons.lightbulb_outline),
-                  selectedIcon: Icon(Icons.lightbulb),
-                  label: 'Steuern'),
-              NavigationDestination(
-                  icon: Icon(Icons.bolt_outlined),
-                  selectedIcon: Icon(Icons.bolt),
-                  label: 'Live'),
-              NavigationDestination(
-                  icon: Icon(Icons.auto_awesome_outlined),
-                  selectedIcon: Icon(Icons.auto_awesome),
-                  label: 'Szenen'),
-              NavigationDestination(
-                  icon: Icon(Icons.tune_outlined),
-                  selectedIcon: Icon(Icons.tune),
-                  label: 'Fader'),
-              NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: 'Mehr'),
-            ],
+            destinations: [for (final p in pages) p.$2],
           ),
         ],
       ),

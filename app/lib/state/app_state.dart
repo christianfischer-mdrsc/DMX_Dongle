@@ -12,6 +12,21 @@ import '../services/usb_link.dart';
 
 /// Show-Daten (Patch, Szenen, Chaser, Netzwerk), Einstellungen, Konto
 /// und das Bindeglied zur Engine.
+/// Wie die Universen im Steuern-Bereich angeordnet sind.
+enum ControlLayout {
+  /// Eine Seite pro Universe (wischen/Reiter) – wie am Handy
+  tabs('Einzeln'),
+
+  /// Universen als Spalten nebeneinander
+  columns('Nebeneinander'),
+
+  /// Universen als Abschnitte untereinander
+  stacked('Untereinander');
+
+  const ControlLayout(this.label);
+  final String label;
+}
+
 class AppState extends ChangeNotifier {
   AppState(this.storage, this.engine, this.account, [FirmwareRepository? firmware])
       : firmware = firmware ?? NoFirmwareRepository();
@@ -28,6 +43,15 @@ class AppState extends ChangeNotifier {
   void setThemeMode(ThemeMode m) {
     themeMode = m;
     storage.saveString('themeMode', m.name);
+    notifyListeners();
+  }
+
+  /// Anordnung der Universen im Steuern-Bereich (Tablet).
+  ControlLayout controlLayout = ControlLayout.tabs;
+
+  void setControlLayout(ControlLayout l) {
+    controlLayout = l;
+    storage.saveString('controlLayout', l.name);
     notifyListeners();
   }
 
@@ -197,6 +221,8 @@ class AppState extends ChangeNotifier {
   void load() {
     final tm = storage.loadString('themeMode');
     themeMode = ThemeMode.values.firstWhere((m) => m.name == tm, orElse: () => ThemeMode.light);
+    final cl = storage.loadString('controlLayout');
+    controlLayout = ControlLayout.values.firstWhere((m) => m.name == cl, orElse: () => ControlLayout.tabs);
     customProfiles.addAll(storage.loadProfiles());
     fixtures.addAll(storage.loadFixtures());
     scenes.addAll(storage.loadScenes());
@@ -304,11 +330,37 @@ class AppState extends ChangeNotifier {
   List<Fixture> fixturesByIds(Iterable<String> ids) =>
       [for (final id in ids) if (fixtureById(id) case final f?) f];
 
+  /// Lampen eines Universe in der vom Nutzer gewählten Reihenfolge.
+  List<Fixture> fixturesIn(int universe) => [for (final f in fixtures) if (f.universe == universe) f];
+
+  /// Lampe [id] vor bzw. hinter [targetId] verschieben (Reihenfolge der Kacheln).
+  void moveFixture(String id, String targetId, {bool after = false}) {
+    if (id == targetId) return;
+    final f = fixtureById(id), t = fixtureById(targetId);
+    if (f == null || t == null) return;
+    fixtures.remove(f);
+    var i = fixtures.indexOf(t);
+    if (after) i++;
+    fixtures.insert(i, f);
+    storage.saveFixtures(fixtures);
+    notifyListeners();
+  }
+
+  /// Reihenfolge eines Universe zurück auf DMX-Adresse sortieren.
+  void sortByAddress(int universe) {
+    final inU = fixturesIn(universe)..sort((a, b) => a.address.compareTo(b.address));
+    var k = 0;
+    for (var i = 0; i < fixtures.length; i++) {
+      if (fixtures[i].universe == universe) fixtures[i] = inU[k++];
+    }
+    storage.saveFixtures(fixtures);
+    notifyListeners();
+  }
+
   void _patchChanged() {
-    fixtures.sort((a, b) => a.universe != b.universe
-        ? a.universe.compareTo(b.universe)
-        : a.address.compareTo(b.address));
+    // Reihenfolge bleibt wie vom Nutzer angeordnet; neue Lampen kommen ans Ende.
     _updateIntensityMask();
+    _updateSubmasters();
     _refreshRunningEffects();
     storage.saveFixtures(fixtures);
     notifyListeners();
@@ -353,9 +405,21 @@ class AppState extends ChangeNotifier {
   // ---------- Gerätesteuerung ----------
 
   /// Wert einer Funktion; mit [part] in dieser Lichtquelle, sonst der erste passende Kanal.
-  int? fixtureValue(Fixture f, ChannelType t, {String? part}) {
+  /// [live] = was gerade rausgeht (mit Effekten, Mastern), sonst der eingestellte Wert.
+  int? fixtureValue(Fixture f, ChannelType t, {String? part, bool live = false}) {
     final off = profileOf(f)?.offsetOf(t, part: part);
-    return off == null ? null : engine.getChannel(f.universe, f.address - 1 + off);
+    if (off == null) return null;
+    final ch = f.address - 1 + off;
+    return live ? engine.liveValue(f.universe, ch) : engine.getChannel(f.universe, ch);
+  }
+
+  /// true, wenn gerade ein Effekt auf einem Kanal der Lampe läuft.
+  bool fixtureHasEffect(Fixture f) {
+    final n = profileOf(f)?.footprint ?? 0;
+    for (var i = 0; i < n; i++) {
+      if (engine.isEffectChannel(f.universe, f.address - 1 + i)) return true;
+    }
+    return false;
   }
 
   /// Setzt Funktionen. Mit [part] nur in dieser Lichtquelle, sonst auf allen
@@ -412,33 +476,34 @@ class AppState extends ChangeNotifier {
   }
 
   /// Aktuelle Lichtfarbe eines Geräts für Vorschauen (null = keine Farbkanäle).
-  Color? fixtureColor(Fixture f, {String? part}) {
+  Color? fixtureColor(Fixture f, {String? part, bool live = false}) {
     final p = profileOf(f);
     if (p == null) return null;
     final pp = part ?? p.mainPart;
     if (!p.partHasColor(pp)) return null;
-    int v(ChannelType t) => fixtureValue(f, t, part: pp) ?? 0;
+    int v(ChannelType t) => fixtureValue(f, t, part: pp, live: live) ?? 0;
     final w = v(ChannelType.white);
     int c(int x) => x + w > 255 ? 255 : x + w;
     return Color.fromARGB(255, c(v(ChannelType.red)), c(v(ChannelType.green)), c(v(ChannelType.blue)));
   }
 
   /// Helligkeit 0..1 (hellster Dimmer, sonst hellster Farbkanal).
-  double fixtureLevel(Fixture f) {
+  double fixtureLevel(Fixture f, {bool live = false}) {
     final p = profileOf(f);
     if (p == null) return 0;
+    int get(int ch) => live ? engine.liveValue(f.universe, ch) : engine.getChannel(f.universe, ch);
     final dims = p.offsetsOf(ChannelType.dimmer);
     var m = 0;
     if (dims.isNotEmpty) {
       for (final d in dims) {
-        final x = engine.getChannel(f.universe, f.address - 1 + d);
+        final x = get(f.address - 1 + d);
         if (x > m) m = x;
       }
       return m / 255;
     }
     for (var i = 0; i < p.channels.length; i++) {
       if (p.channels[i].type.isColor || p.channels[i].type == ChannelType.generic) {
-        final x = engine.getChannel(f.universe, f.address - 1 + i);
+        final x = get(f.address - 1 + i);
         if (x > m) m = x;
       }
     }
@@ -547,6 +612,52 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- Gruppen-Master ----------
+
+  /// Helligkeit je Gruppe 0..1 (Fader im Pult). Lampen in mehreren Gruppen:
+  /// Faktoren werden multipliziert.
+  final Map<String, double> groupMasters = {};
+
+  double groupMaster(FixtureGroup g) => groupMasters[g.id] ?? 1.0;
+
+  void setGroupMaster(FixtureGroup g, double v) {
+    groupMasters[g.id] = v.clamp(0.0, 1.0);
+    _updateSubmasters();
+    notifyListeners();
+  }
+
+  void _updateSubmasters() {
+    final map = <int, Map<int, double>>{};
+    for (final g in groups) {
+      final level = groupMasters[g.id] ?? 1.0;
+      if (level >= 1.0) continue;
+      for (final f in fixturesByIds(g.fixtureIds)) {
+        final p = profileOf(f);
+        if (p == null) continue;
+        final u = map.putIfAbsent(f.universe, () => <int, double>{});
+        for (final c in _intensityOffsets(p)) {
+          final ch = f.address - 1 + c;
+          u[ch] = (u[ch] ?? 1.0) * level;
+        }
+      }
+    }
+    engine.setSubmasters(map);
+  }
+
+  /// Helligkeitskanäle eines Profils (Dimmer, sonst Farben) – wie beim Grandmaster.
+  Iterable<int> _intensityOffsets(FixtureProfile p) sync* {
+    for (final part in p.parts) {
+      final dims = p.offsetsOf(ChannelType.dimmer, part: part);
+      if (dims.isNotEmpty) {
+        yield* dims;
+      } else {
+        for (var c = 0; c < p.channels.length; c++) {
+          if (p.channels[c].part == part && p.channels[c].type.isColor) yield c;
+        }
+      }
+    }
+  }
+
   // ---------- Gruppen ----------
 
   FixtureGroup saveGroup(String name, List<String> fixtureIds) {
@@ -565,11 +676,14 @@ class AppState extends ChangeNotifier {
         ..addAll(fixtureIds);
     }
     storage.saveGroups(groups);
+    _updateSubmasters();
     notifyListeners();
   }
 
   void deleteGroup(FixtureGroup g) {
     groups.remove(g);
+    groupMasters.remove(g.id);
+    _updateSubmasters();
     storage.saveGroups(groups);
     notifyListeners();
   }

@@ -43,10 +43,21 @@ class DmxEngine extends ChangeNotifier {
   final List<int> _lastSendMs = [];
   final Map<int, Set<int>> _intensity = {}; // vom Grandmaster betroffene Kanäle
 
+  /// Gruppen-Master: Faktor 0..1 je Helligkeitskanal (fehlt = 1).
+  final Map<int, Map<int, double>> _submaster = {};
+
+  /// Kanäle, die im letzten Takt von Effekten überschrieben wurden.
+  final List<Set<int>> _fxChannels = [];
+
+  /// Zählt hoch, wenn sich die Ausgabe ändert (~15 Hz). Für Live-Anzeigen
+  /// (Fader-Pegel, Kachelfarben), ohne die ganze App neu zu zeichnen.
+  final ValueNotifier<int> live = ValueNotifier(0);
+
   Timer? _timer;
   final Stopwatch _clock = Stopwatch()..start();
   int _tickCount = 0;
   bool _dirtyUi = false;
+  bool _liveDirty = false;
 
   double _grandMaster = 1.0;
   bool _blackout = false;
@@ -106,6 +117,7 @@ class DmxEngine extends ChangeNotifier {
       _adopted.add(<int>{});
       _lastSent.add(Uint8List(512));
       _lastSendMs.add(-_keepAliveMs);
+      _fxChannels.add(<int>{});
     }
     while (_prog.length > n) {
       _prog.removeLast();
@@ -113,6 +125,7 @@ class DmxEngine extends ChangeNotifier {
       _adopted.removeLast();
       _lastSent.removeLast();
       _lastSendMs.removeLast();
+      _fxChannels.removeLast();
     }
   }
 
@@ -163,6 +176,15 @@ class DmxEngine extends ChangeNotifier {
       ..clear()
       ..addAll(map);
   }
+
+  /// Gruppen-Master setzen: je Universe die Helligkeitskanäle mit Faktor.
+  void setSubmasters(Map<int, Map<int, double>> map) {
+    _submaster
+      ..clear()
+      ..addAll(map);
+  }
+
+  double _sub(int u, int ch) => _submaster[u]?[ch] ?? 1.0;
 
   set grandMaster(double v) {
     _grandMaster = v < 0 ? 0.0 : (v > 1 ? 1.0 : v);
@@ -337,7 +359,10 @@ class DmxEngine extends ChangeNotifier {
     _effects.removeWhere((_, r) => r.untilMs != null && now > r.untilMs!);
     int read(int u, int ch) => u < _prog.length && ch >= 0 && ch < 512 ? _prog[u][ch] : 0;
     void write(int u, int ch, int v) {
-      if (u < out.length && ch >= 0 && ch < 512) out[u][ch] = v;
+      if (u < out.length && ch >= 0 && ch < 512) {
+        out[u][ch] = v;
+        _fxChannels[u].add(ch);
+      }
     }
 
     for (final r in _effects.values) {
@@ -379,11 +404,14 @@ class DmxEngine extends ChangeNotifier {
       final v = data[c];
       if (v == sent[c]) continue;
       if (now - changedAt[c] < _echoGuardMs) continue;
+      // Kanäle unter Effekt-Kontrolle nicht übernehmen (Echo hinkt hinterher)
+      if (_fxChannels[u].contains(c)) continue;
       var base = v;
       if (mask != null && mask.contains(c)) {
-        // Grandmaster herausrechnen, damit hier wieder genau v rausgeht
-        if (_blackout || _grandMaster <= 0) continue;
-        base = (v / _grandMaster).round();
+        // Grandmaster und Gruppen-Master herausrechnen, damit hier wieder genau v rausgeht
+        final f = _grandMaster * _sub(u, c);
+        if (_blackout || f <= 0) continue;
+        base = (v / f).round();
       }
       prog[c] = _byte(base);
       _adopted[u].add(c);
@@ -401,7 +429,11 @@ class DmxEngine extends ChangeNotifier {
     _advanceFade(now);
 
     final base = [for (final u in _prog) Uint8List.fromList(u)];
+    for (final fx in _fxChannels) {
+      fx.clear();
+    }
     _applyEffects(now, base);
+    var anyChange = false;
     for (var u = 0; u < _prog.length; u++) {
       final out = _computeOutput(u, base[u]);
       final last = _lastSent[u], adopted = _adopted[u], changedAt = _localChangeMs[u];
@@ -410,6 +442,7 @@ class DmxEngine extends ChangeNotifier {
       }
       adopted.clear();
       final changed = !_equals(out, _lastSent[u]);
+      if (changed) anyChange = true;
       if (changed || now - _lastSendMs[u] >= _keepAliveMs) {
         transport.sendDmx(portAddressFor(u), out);
         _lastSent[u] = out;
@@ -417,8 +450,15 @@ class DmxEngine extends ChangeNotifier {
       }
     }
 
-    // UI während Fades mit ~20 Hz aktualisieren
-    if (_dirtyUi && (++_tickCount).isEven) {
+    // Live-Anzeigen mit ~13 Hz, wenn sich die Ausgabe ändert (Effekte, Fades)
+    _tickCount++;
+    if (anyChange) _liveDirty = true;
+    if (_liveDirty && _tickCount % 3 == 0) {
+      _liveDirty = false;
+      live.value++;
+    }
+    // Ganze UI nur bei Fades/Übernahmen (Fader-Stellungen ändern sich) mit ~20 Hz
+    if (_dirtyUi && _tickCount.isEven) {
       _dirtyUi = false;
       notifyListeners();
     }
@@ -433,19 +473,29 @@ class DmxEngine extends ChangeNotifier {
       }
       return out;
     }
-    if (_grandMaster < 1.0) {
+    final subs = _submaster[u];
+    if (_grandMaster < 1.0 || (subs != null && subs.isNotEmpty)) {
       for (final c in _intensity[u] ?? const <int>{}) {
-        out[c] = (out[c] * _grandMaster).round();
+        final f = _grandMaster * (subs?[c] ?? 1.0);
+        if (f < 1.0) out[c] = (out[c] * f).round();
       }
     }
     return out;
   }
 
-  /// Wert, der tatsächlich rausgeht (inkl. Grandmaster) – für die Anzeige.
+  /// Wert, der gerade tatsächlich rausgeht: mit Effekten, Grandmaster,
+  /// Gruppen-Mastern und Blackout. Für Live-Anzeigen.
+  int liveValue(int u, int ch) =>
+      u < _lastSent.length && ch >= 0 && ch < 512 ? _lastSent[u][ch] : 0;
+
+  /// true, wenn ein Effekt diesen Kanal gerade steuert.
+  bool isEffectChannel(int u, int ch) => u < _fxChannels.length && _fxChannels[u].contains(ch);
+
+  /// Wert nach Grandmaster (ohne Effekte) – für die Anzeige.
   int outputValue(int u, int ch) {
     var v = getChannel(u, ch);
     if (_intensity[u]?.contains(ch) ?? false) {
-      v = _blackout ? 0 : (v * _grandMaster).round();
+      v = _blackout ? 0 : (v * _grandMaster * _sub(u, ch)).round();
     }
     return v;
   }
@@ -461,6 +511,7 @@ class DmxEngine extends ChangeNotifier {
 
   @override
   void dispose() {
+    live.dispose();
     _timer?.cancel();
     _echoSub?.cancel();
     transport.close();

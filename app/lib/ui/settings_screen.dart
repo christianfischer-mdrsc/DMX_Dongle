@@ -120,6 +120,24 @@ class SettingsScreen extends StatelessWidget {
                         onSelectionChanged: (v) => app.setThemeMode(v.first),
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    const Text('Universen im Tab „Steuern“ (Tablet)'),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<ControlLayout>(
+                        segments: const [
+                          ButtonSegment(value: ControlLayout.tabs, icon: Icon(Icons.tab_outlined), label: Text('Einzeln')),
+                          ButtonSegment(value: ControlLayout.columns, icon: Icon(Icons.view_column_outlined), label: Text('Neben')),
+                          ButtonSegment(value: ControlLayout.stacked, icon: Icon(Icons.view_agenda_outlined), label: Text('Unter')),
+                        ],
+                        selected: {app.controlLayout},
+                        onSelectionChanged: (v) => app.setControlLayout(v.first),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Am Handy gibt es immer eine Seite pro Universum.',
+                        style: Theme.of(context).textTheme.bodySmall),
                   ]),
                 ),
               ]),
@@ -180,7 +198,7 @@ class SettingsScreen extends StatelessWidget {
                     child: Image.asset('assets/logo.png', width: 40, height: 40),
                   ),
                   title: const Text('DMX Master'),
-                  subtitle: const Text('Version 0.8.0 · Art-Net 4'),
+                  subtitle: const Text('Version 0.9.0 · Art-Net 4'),
                 ),
                 if (app.account.isDemo)
                   ListTile(
