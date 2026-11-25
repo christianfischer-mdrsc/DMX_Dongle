@@ -122,7 +122,7 @@ class _PultScreenState extends State<PultScreen> {
               ]);
             }
 
-            final programmerLabel = chosen.isEmpty ? 'Programmer' : 'Programmer (${chosen.length})';
+            const programmerLabel = 'Programmer'; // Anzahl steht oben als Chip
             Widget main;
             if (w >= 1100 && h >= 560) {
               main = Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -133,7 +133,7 @@ class _PultScreenState extends State<PultScreen> {
                 SizedBox(width: 300, child: panel(playback)),
               ]);
             } else if (w >= 640) {
-              final poolW = (w * 0.34).clamp(220.0, 320.0);
+              final poolW = (w * (h < 480 ? 0.3 : 0.34)).clamp(180.0, 320.0);
               main = Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SizedBox(width: poolW, child: panel(pools)),
                 gap,
@@ -150,6 +150,17 @@ class _PultScreenState extends State<PultScreen> {
             } else {
               // Handy hochkant: alles nacheinander über Reiter
               main = tabbed([('Geräte', pools), (programmerLabel, programmer), ('Abruf', playback)]);
+            }
+
+            // Handy quer: zu flach für eine Leiste unten → Fader als Spalte rechts, volle Höhe
+            if (h < 480 && w >= 640) {
+              final wingW = (app.groups.length * 54.0 + 54 + 96).clamp(160.0, w * 0.36);
+              return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(
+                  child: Padding(padding: const EdgeInsets.fromLTRB(6, 0, 6, 6), child: main),
+                ),
+                SizedBox(width: wingW, child: _FaderWing(app: app, height: h, compact: true)),
+              ]);
             }
 
             return Column(children: [
