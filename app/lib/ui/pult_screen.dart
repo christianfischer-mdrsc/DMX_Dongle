@@ -295,7 +295,6 @@ class _PoolKey extends StatelessWidget {
           : selected
               ? s.primaryContainer
               : s.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: active ? green : Colors.transparent, width: 1.5),
