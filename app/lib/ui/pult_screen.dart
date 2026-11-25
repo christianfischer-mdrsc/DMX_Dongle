@@ -637,6 +637,7 @@ class _FaderWing extends StatelessWidget {
                             backgroundColor: e.blackout ? s.error : s.surfaceContainerHighest,
                             foregroundColor: e.blackout ? s.onError : s.onSurface,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
                           ),
                           onPressed: () => e.blackout = !e.blackout,
                           child: const FittedBox(child: Text('BLACKOUT', style: TextStyle(fontWeight: FontWeight.w800))),
@@ -647,14 +648,15 @@ class _FaderWing extends StatelessWidget {
                         child: FilledButton.tonal(
                           style: FilledButton.styleFrom(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
                           ),
                           onPressed: e.tap,
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          child: FittedBox(child: Column(mainAxisSize: MainAxisSize.min, children: [
                             const Text('TAP', style: TextStyle(fontWeight: FontWeight.w800)),
                             Text('${e.bpm.round()} BPM',
                                 style: const TextStyle(
                                     fontSize: 11, fontFeatures: [FontFeature.tabularFigures()])),
-                          ]),
+                          ])),
                         ),
                       ),
                     ]),
